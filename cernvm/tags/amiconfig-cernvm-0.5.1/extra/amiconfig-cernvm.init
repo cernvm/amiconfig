@@ -1,0 +1,39 @@
+#! /bin/bash
+#
+# Copyright (c) 2007-2008 rPath, Inc.
+#
+# chkconfig: 2345 60 60
+# description:  Obtain credentials from CernVM Online
+#
+### BEGIN INIT INFO
+# Provides: amiconfig-cernvm
+# Required-Start: $network
+# Required-Stop:
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 2 6
+# Description: Run amiconfig to get credentials from CernVM Online
+### END INIT INFO
+
+# Source function library.
+[ -f /etc/init.d/functions ] && . /etc/init.d/functions
+
+RETVAL=0
+
+case "$1" in
+ start)
+  # Retreive the credentials from relevant sources.
+   /usr/sbin/cernvm-online.sh site
+   RETVAL=$?
+  echo
+ ;;
+ status)
+ ;;
+   stop)
+ ;;
+ *)
+  echo $"Usage: $0 {start}"
+  exit 1
+esac
+
+exit $RETVAL
+

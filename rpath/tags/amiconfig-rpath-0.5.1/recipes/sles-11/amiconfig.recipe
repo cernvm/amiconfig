@@ -1,0 +1,54 @@
+#
+# Copyright (c) 2007-2009 rPath, Inc.
+# This file is distributed under the terms of the MIT License.
+# A copy is available at http://www.rpath.com/permanent/mit-license.html
+#
+
+class AMIConfig(BuildPackageRecipe):
+    name = 'amiconfig'
+    version = '0.4.3'
+
+    buildRequires = [ 'python-conary:devel' ]
+
+    def setup(r):
+        r.addMercurialSnapshot('http://hg.rpath.com/amiconfig',
+            tag='%(name)s-%(version)s')
+ 
+        # Setup to use our python-conary package
+        r.Environment('PATH', '/sbin:/bin:/usr/sbin:/usr/bin:/usr/conary/bin')
+        r.macros.pymaj = '2.6'
+        r.macros.pyroot = '/usr/conary'
+        r.macros.pybin = '%(pyroot)s/bin/python%(pymaj)s'
+        r.macros.pypkgs = '%(pyroot)s/%(lib)s/python%(pymaj)s'
+        r.macros.sitepkgs = '%(pypkgs)s/site-packages'
+        r.Replace('^PYTHON =', '^PYTHON ?=', 'Make.rules')
+
+        r.Replace('dnsupdate.py', '', 'amiconfig/plugins/Makefile')
+        r.Make('libdir=%(libdir)s sitedir=%(sitepkgs)s'
+               ' initdir=%(initdir)s PYTHON=%(pybin)s')
+        r.MakeInstall('libdir=%(libdir)s sitedir=%(sitepkgs)s'
+                      ' initdir=%(initdir)s PYTHON=%(pybin)s')
+        r.TagSpec('initscript', '%(initdir)s/.*')
+
+        r.Replace(r'(.*chkconfig.*)10(.*)', r'\1 13\2', '%(initdir)s/amiconfig')
+
+        # Change any #! lines to point to internal python interpreter
+        r.Replace(('#!/.*/python', '#!%(pybin)s'),
+                  ('#!/usr/bin/env python', '#!%(pybin)s'),
+                  ('#$', '#!%(pybin)s'),
+                  ('#.*mode: python.*', '#!%(pybin)s'),
+                  '%(bindir)s/*', r.regexp(r'%(sitepkgs)s/.*\.py'),
+                  '%(datadir)s/conary/*',
+                  lines=1, allowNoChange=True)
+        r.NormalizePythonInterpreterVersion(
+            versionMap=(('/usr/bin/python', '%(pybin)s'),
+                        ('/usr/bin/python2.4', '%(pybin)s'),
+                        ('/usr/bin/python2.5', '%(pybin)s'),
+                        ('/usr/bin/python2.6', '%(pybin)s')))
+
+        # Remove python deps, add trove deps
+        r.Requires(exceptDeps='python:.*')
+        r.Requires('python-conary:runtime', '%(bindir)s/', '%(sitepkgs)s/')
+        r.Requires('conary:python', '%(sbindir)s/amiconfig')
+        r.ComponentSpec('python', '%(sitepkgs)s/')
+        del r.NormalizeInitscriptContents

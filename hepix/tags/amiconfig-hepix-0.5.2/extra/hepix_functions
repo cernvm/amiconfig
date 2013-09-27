@@ -1,0 +1,122 @@
+CONTEXT_DIR=/var/lib/hepix/context
+AMICONFIG_CONTEXT_DIR=/var/lib/amiconfig
+
+setupContext () {
+    VERSION="2007-12-15"
+    # get user data from CD rather than network for OpenNebula 
+    if [ -e $CONTEXT_DIR/context.sh ]; then
+        . $CONTEXT_DIR/context.sh
+        mkdir -p $AMICONFIG_CONTEXT_DIR/${VERSION}
+        if [ "x$EC2_USER_DATA" != "x" ] ; then
+	    echo $EC2_USER_DATA | base64 -di > $AMICONFIG_CONTEXT_DIR/${VERSION}/user-data 2>/dev/null
+        fi
+        ssh_keyfile=$CONTEXT_DIR/$ROOT_PUBKEY 
+        if [ "x$PUBLIC_KEY" != "x" ]; then
+	    ssh_keyfile=/tmp/authorized_keys.$$
+	    echo "$PUBLIC_KEY" > $ssh_keyfile
+        fi
+        if [ -f $ssh_keyfile ] ; then
+	    mkdir -p $AMICONFIG_CONTEXT_DIR/${VERSION}/meta-data/public-keys/0
+	    mv -f $ssh_keyfile $AMICONFIG_CONTEXT_DIR/${VERSION}/meta-data/public-keys/0/openssh-key
+        fi
+	if [ -e /etc/sysconfig/amiconfig ]; then
+	    amiconf=`cat /etc/sysconfig/amiconfig | grep -v AMICONFIG_CONTEXT_URL`
+	    echo $amiconf > /etc/sysconfig/amiconfig
+        fi
+        echo "export AMICONFIG_CONTEXT_URL=file:$AMICONFIG_CONTEXT_DIR/${VERSION}" >> /etc/sysconfig/amiconfig
+        . /etc/sysconfig/amiconfig
+        chmod -R 700 $AMICONFIG_CONTEXT_DIR
+    fi
+}
+
+finalize () {
+    PHASE=$1
+    COMM=$2
+    LOGPREFIX="${PHASE}/${COMM}"
+    logger -t $0 "$LOGPREFIX: cleaning environment"
+    if [ "$COMM" = "start" ]; then
+        touch "/var/lock/subsys/vmcontext_${PHASE}"
+    elif [ "$COMM" = "stop" ]; then
+        rm -f "/var/lock/subsys/vmcontext_${PHASE}"
+    fi
+}
+
+loadContext () {
+    cd $CONTEXT_DIR
+    # check for OpenNebula default context file name
+    if [ -e ./init.sh ]; then
+        . ./init.sh 
+    fi
+    # kept for backward compatibility 
+    if [ -e ./context.sh ]; then
+        . ./context.sh 
+    fi          
+}
+
+sourceWholeDir () {
+    DIRNAME="/etc/vmcontext.d"
+    cd $CONTEXT_DIR
+    if [ -d "$DIRNAME" ]; then
+        for i in $DIRNAME/*.sh ; do
+            if [ -r "$i" ]; then
+                logger -t $0 "Sourcing script $i"
+                .  $i
+            fi
+        done
+    fi
+}
+
+runContextualizationScript () {
+    PHASE=$1
+    COMM=$2
+    LOGPREFIX="${PHASE}/${COMM}"
+    cd $CONTEXT_DIR
+    if [ -e "./${PHASE}.sh" ]; then
+        logger -t $0 "$LOGPREFIX: executing ${PHASE}.sh"
+        . "./${PHASE}.sh" $COMM
+    fi          
+}
+
+
+getResourcesFromCD() {
+    rdisk=""
+    for dev in /dev/{xv,v,h,s}d; do
+        if [ -e "${dev}a" ] ; then
+            rdisk=$dev
+        fi
+    done
+    if [ -z "${rdisk}" ]; then
+        logger -t $0 "No virtual disk with contextualization image found"
+        return 1
+    fi
+
+    logger -t $0 "Attempting to mount contextualization image from $rdisk"
+    mount_dir=$(mktemp -d)
+
+    context_disk_found=""
+
+    for disk in c d b; do
+        mount -t iso9660 ${rdisk}${disk} $mount_dir > /dev/null 2>&1
+        if [ 0 -eq $? ]; then
+            if [ -e "$mount_dir/prolog.sh" -o  -e "$mount_dir/context.sh" ]; then
+                cp -r $mount_dir/* $CONTEXT_DIR/
+                chmod 700 $CONTEXT_DIR
+                context_disk_found="indeed"
+                break
+            else
+                umount $mount_dir >/dev/null 2>&1
+            fi
+        fi
+    done
+
+    if [ -z "${context_disk_found}" ]; then
+        logger -t $0 "No attached disk contains contextualization scripts"
+        return 1
+    fi
+    if [ -n "$mount_dir" -a -d "$mount_dir" ]; then
+        umount $mount_dir >/dev/null 2>&1
+        rm -rf $mount_dir
+    fi
+    return 0
+}
+

@@ -1,0 +1,33 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2007-2011 rPath, Inc.
+#
+
+import sys
+from amiconfig.lib import log
+from amiconfig import flags
+
+options = flags.options
+
+if options.probe:
+    try:
+        from amiconfig import metadataservice
+    except ImportError, e:
+        sys.stderr.write("Unable to import amiconfig module: %s\n" % (e, ))
+        sys.exit(10)
+    ms = metadataservice.MetadataService(debug=options.debug)
+    canConnect = ms.canConnect()
+    sys.exit(not canConnect)
+
+from amiconfig import AMIConfig
+
+return_value = 1
+
+try:
+    amiConfig = AMIConfig(debug=options.debug)
+    return_value = amiConfig.configure()
+except Exception, e:
+    log.error(e)
+    raise
+
+sys.exit(return_value)

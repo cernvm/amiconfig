@@ -1,0 +1,51 @@
+#!/bin/bash
+
+. /etc/init.d/hepix_functions
+
+fetchFromIP() {
+    name=$1
+    requiressl=$2
+
+    if [ "x"$requiressl == "x" -o requiressl == 'no' ]; then
+        default="http://169.254.169.254/context/$name";
+        logger -t rc.vmcontext "fetching site contextualization tar ball $name from  169.254.169.254/context port 80 from http unencrypted"
+        /usr/bin/curl --connect-timeout 10 -k $default > /var/tmp/context.tgz 2>/dev/null ;
+        RETVAL=$?
+    else 
+        default="https://169.254.169.254/context/$name";
+        logger -t rc.vmcontext "fetching site contextualization tar ball $name from  169.254.169.254/context with SSL"
+        /usr/bin/curl  --connect-timeout 10 -k $default > /var/tmp/context.tgz 2>/dev/null ;
+        RETVAL=$?
+    fi
+
+    if [ 0 -eq $RETVAL ]; then
+        logger -t rc.vmcontext "Received contextualization scripts from 169.254.169.254 port 443 without SSL verification"
+        (
+            if [ ! -e $CONTEXT_DIR ]; then
+                mkdir $CONTEXT_DIR
+            fi
+            cd $CONTEXT_DIR
+            tar -zxf /var/tmp/context.tgz
+            rm -f /var/tmp/context.tgz;
+        )
+    fi
+    return $RETVAL
+}
+
+tarname=$1
+requiressl=$2
+fetchFromIP $tarname $requiressl
+
+if [ -d $CONTEXT_DIR ]; then 
+    cd $CONTEXT_DIR
+    if [ -e init.sh ]; then
+        . init.sh
+    fi
+    if [ -e context.sh ] ; then
+        . context.sh
+    fi
+    if [ -e prolog.sh -a ! -e /etc/contextdone ] ; then
+        . prolog.sh start
+        touch /etc/contextdone
+    fi
+fi

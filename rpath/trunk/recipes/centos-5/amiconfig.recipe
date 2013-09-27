@@ -1,0 +1,30 @@
+#
+# Copyright (c) 2007-2009 rPath, Inc.
+# This file is distributed under the terms of the MIT License.
+# A copy is available at http://www.rpath.com/permanent/mit-license.html
+#
+
+loadSuperClass('rpathpackage')
+class AMIConfig(BuildPackageRecipe, RpathPackageRecipe):
+    name = 'amiconfig'
+    version = '0.5.1'
+
+    buildRequires = [ 'python-conary:devel' ]
+
+    def setup(r):
+        r.rpathSetup()
+        r.addMercurialSnapshot('http://hg.rpath.com/amiconfig', tag='%(name)s-%(version)s')
+ 
+        # Setup to use our python-conary package
+        r.Replace('^PYTHON =', '^PYTHON ?=', 'Make.rules')
+
+        r.Replace('dnsupdate.py', '', 'amiconfig/plugins/Makefile')
+        r.Make('libdir=%(libdir)s sitedir=%(sitepkgs)s'
+               ' initdir=%(initdir)s PYTHON=%(pybin)s')
+        r.MakeInstall('libdir=%(libdir)s sitedir=%(sitepkgs)s'
+                      ' initdir=%(initdir)s PYTHON=%(pybin)s')
+        r.TagSpec('initscript', '%(initdir)s/.*')
+
+        r.Replace(r'(.*chkconfig.*)10(.*)', r'\1 13\2', '%(initdir)s/amiconfig')
+
+        if Arch.x86 or Arch.x86_64: pass

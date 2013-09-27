@@ -1,0 +1,56 @@
+#!/bin/bash
+#
+# vmcontext_epilog Bring up/down contextualization
+#
+# chkconfig: 345 99 2
+# description: HEPiX compliant contextualisation epilog
+#
+### BEGIN INIT INFO
+# Provides: $vmcontext_epilog
+# Required-Start: $local_fs $network
+# Required-Stop: $local_fs $network
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 2 6
+# Short-Description: HEPiX contextualization epilog
+# Description: HEPiX contextualization final startup activities
+### END INIT INFO
+
+# Source function library
+. /etc/init.d/hepix_functions
+
+start() {
+    echo "Starting vmcontext_epilog ..."
+    (
+        loadContext
+        runContextualizationScript "epilog" "start"
+    )
+    RETVAL=$?
+    finalize "epilog" "start"
+    return $RETVAL
+}
+
+stop() {
+    (
+        loadContext
+        runContextualizationScript "epilog" "stop"
+    )
+    RETVAL=$?
+    finalize "epilog" "stop"
+    return $RETVAL
+}
+
+case "$1" in
+    start)
+                start
+                RETVAL=$?
+                ;;
+    stop)
+                stop
+                RETVAL=$?
+                ;;
+        *)
+        echo $"Usage: $0 {start|stop}"
+        RETVAL=2
+esac
+
+exit $RETVAL

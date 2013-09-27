@@ -1,0 +1,48 @@
+#
+# Copyright (c) 2004-2009 rPath, Inc.
+#
+# This program is distributed under the terms of the Common Public License,
+# version 1.0. A copy of this license should have been distributed with this
+# source file in a file called LICENSE. If it is not present, the license
+# is always available at http://www.opensource.org/licenses/cpl.php.
+#
+# This program is distributed in the hope that it will be useful, but
+# without any warranty; without even the implied warranty of merchantability
+# or fitness for a particular purpose. See the Common Public License for
+# full details.
+#
+
+version = "@version@"
+
+PLUGIN_PATH = [ '@amiconfigdir@/plugins',
+                '@libdir@/amiconfig/plugins' ]
+
+import ConfigParser
+from amiconfig.lib import flags
+
+options = flags.options
+
+def __getConfigValue(section, key):
+    _config = ConfigParser.RawConfigParser()
+    f = open(options.configfile)
+    _config.readfp(f)
+    f.close()
+    return _config.get(section, key).strip()
+
+def __getConfigValueAsList(section, key):
+    _value = __getConfigValue(section, key)
+    if _value:
+        return [k.strip() for k in _value.split(',')]
+    else:
+        return []
+
+# List of plugins to always load and run. You can't turn these off, be careful
+# about adding more.
+# list of default plugins is expected in /etc/amiconfig in section 'general' in
+# key 'enabled_plugins', e.g.:
+# 
+# [general]
+# enabled_plugins = disablessh, something
+# disabled_plugins = rootsshkeys, something_else 
+DEFAULT_PLUGINS_ON  = __getConfigValueAsList(section='general', key='enabled_plugins')
+DEFAULT_PLUGINS_OFF = __getConfigValueAsList(section='general', key='disabled_plugins')
