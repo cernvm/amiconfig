@@ -20,7 +20,7 @@ class AMIConfigPlugin(AMIPlugin):
         cfg = self.ud.getSection('appliance-agent')
         
         if 'password' in cfg:
-          util.call(['htpasswd', '-mb', "/usr/libexec/cernvm-appliance-agent/.htpasswd %s" % (cfg['password'])])
+          util.call(['htpasswd', '-mb', "/usr/libexec/cernvm-appliance-agent/.htpasswd admin %s" % (cfg['password'])])
           util.call(['mkdir', '-p', '/var/lib/cernvm-appliance-agent'])
           util.call(['touch', '/var/lib/cernvm-appliance-agent/password_set'])
           util.call(['chown', '-R', 'cernvm-appliance-agent', '/var/lib/cernvm-appliance-agent'])
