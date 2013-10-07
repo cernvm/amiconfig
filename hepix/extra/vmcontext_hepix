@@ -19,17 +19,24 @@
 
 AMICONFIG="/usr/sbin/amiconfig.sh"
 
+. /etc/init.d/functions
 . /etc/init.d/hepix_functions
 
 start() {
-    echo "Starting vmcontext_hepix ..."
+    echo -n "Starting vmcontext_hepix..."
     setupContext
     # now run amiconfig with default ustings to proceess user data
     $AMICONFIG user
     # now run amiconfig with site/hepix plugin enabled only to enforce site policies
     $AMICONFIG hepix
     RETVAL=$?
-    return $RETVAL
+    if [ "$RETVAL" == 0 ] ; then
+      success
+    else
+      warning
+    fi
+    echo ''
+    return 0
 }
 
 stop() {
