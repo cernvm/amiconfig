@@ -67,8 +67,13 @@ RetrieveUserData() {
   else
     RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack
     if [ $? == 1 ] ; then
-      $LOGGER "No user-data can be retrieved from any location"
-      return 1
+      if [ ! -f /cernvm/extra-user-data ]; then
+        $LOGGER "No user-data can be retrieved from any location"
+        return 1
+      else
+        cat /cernvm/extra-user-data > "$AMICONFIG_LOCAL_USER_DATA"
+        chmod 600 "$AMICONFIG_LOCAL_USER_DATA" 
+      fi
     fi
   fi
 
@@ -84,6 +89,10 @@ RetrieveUserData() {
       # Failure in uncompressing is non-fatal
       $LOGGER "Failure uncompressing user-data: leaving original user-data there"
     fi
+  fi
+
+  if [ -f /cernvm/extra-user-data ]; then
+    cat /cernvm/extra-user-data >> "$AMICONFIG_LOCAL_USER_DATA" 
   fi
 
   return 0
