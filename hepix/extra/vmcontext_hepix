@@ -2,7 +2,7 @@
 #
 # vmcontext_hepix 
 #
-# chkconfig: 345 50 50
+# chkconfig: 345 45 45
 # description: HEPiX compliant contextualisation
 #
 ### BEGIN INIT INFO
