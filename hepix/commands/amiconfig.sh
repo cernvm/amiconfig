@@ -65,14 +65,14 @@ RetrieveUserData() {
     fi
 
   else
-    RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack
+    RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack || RetrieveUserDataGCE
     if [ $? == 1 ] ; then
       if [ ! -f /cernvm/extra-user-data ]; then
         $LOGGER "No user-data can be retrieved from any location"
         return 1
       else
         cat /cernvm/extra-user-data > "$AMICONFIG_LOCAL_USER_DATA"
-        chmod 600 "$AMICONFIG_LOCAL_USER_DATA" 
+        chmod 600 "$AMICONFIG_LOCAL_USER_DATA"
       fi
     fi
   fi
@@ -92,7 +92,7 @@ RetrieveUserData() {
   fi
 
   if [ -f /cernvm/extra-user-data ]; then
-    cat /cernvm/extra-user-data >> "$AMICONFIG_LOCAL_USER_DATA" 
+    cat /cernvm/extra-user-data >> "$AMICONFIG_LOCAL_USER_DATA"
   fi
 
   return 0
@@ -213,6 +213,65 @@ RetrieveUserDataEC2() {
   return 1
 
 }
+
+
+# Trying to contact the GCE metadata server. Returns 0 on success, 1 on
+# failure. The user-data is saved locally
+RetrieveUserDataGCE() {
+  # GCE metadata server versions
+  GCE_API_VERSION="v1"
+  SERVER="169.254.169.254"
+  DEFAULT_URL="http://$SERVER/computeMetadata/${GCE_API_VERSION}/instance/attributes"
+
+  # Local check
+  LOCAL_USER_DATA="/var/lib/amiconfig/${GCE_API_VERSION}"
+  if [ -f $LOCAL_USER_DATA/user-data ] ; then
+    # Found user-data locally. Update configuration
+    # We should just rely on the local user data without actually updating the configuration
+    $LOGGER "GCE: user-data found locally, won't download again: $LOCAL_USER_DATA"
+    export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+    export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+
+    # Proper permissions
+    chmod 0600 "$AMICONFIG_LOCAL_USER_DATA"
+
+    # If we exit here, everything is consistent
+    return 0
+  fi
+
+  # If we are here, no user-data has been found locally. Look for HTTP metadata
+  $LOGGER "GCE: no local user-data found: trying metadata HTTP server $SERVER instead"
+
+  # Remote check. Can we open a TCP connection to the server?
+  nc -w 1 $SERVER 80 > /dev/null 2>&1
+  if [ $? == 0 ] ; then
+    $LOGGER "GCE: metadata server $SERVER seems to respond"
+    LOCAL_USER_DATA="/var/lib/amiconfig/${GCE_API_VERSION}/"
+    REMOTE_USER_DATA="${DEFAULT_URL}/cvm-user-data"
+    DATA=$(wget --header="X-Google-Metadata-Request: True" -t$AMI_DOWNLOAD_RETRIES -T$AMI_DOWNLOAD_TIMEOUT_S -q -O - $REMOTE_USER_DATA 2> /dev/null)
+    if [ $? == 0 ] ; then
+      $LOGGER "GCE: user-data downloaded from $REMOTE_USER_DATA and written locally"
+
+      # Write file there for script
+      mkdir -p "$LOCAL_USER_DATA"
+      echo "$DATA" | base64 -d > "$LOCAL_USER_DATA"/user-data
+      chmod 0600 "$LOCAL_USER_DATA"/user-data
+
+      # Export local location
+      export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+      export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+
+      # Exit consistently (user-data written, env exported, settings saved)
+      return 0
+    fi
+  fi
+
+  # Error condition (no env exported, no file written)
+  $LOGGER "GCE: can't find any user-data"
+  return 1
+
+}
+
 
 # Trying to retrieve user data from CloudStack. The user-data is saved locally.
 # Returns 0 on success, 1 on failure
