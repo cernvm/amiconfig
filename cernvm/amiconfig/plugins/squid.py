@@ -65,4 +65,5 @@ class AMIConfigPlugin(AMIPlugin):
                 f.close()
 	
 	os.system("/sbin/chkconfig squid on")
+	os.system("squid -z")
 	os.system("/sbin/service squid start")
