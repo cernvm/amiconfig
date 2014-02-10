@@ -4,6 +4,7 @@
 
 import os
 import string
+import fileinput
 from random import choice
 
 from subprocess import call
@@ -18,51 +19,50 @@ class AMIConfigPlugin(AMIPlugin):
     def configure(self):
         """
         [squid]
-        cvmfs_server = cernvm-webfs.cern.ch
-        cache_mem = 4096 MB
-        maximum_object_size_in_memory =  32 KB
+        backends = server1.cern.ch,server2.fnal.gov,...
         cache_dir = /var/spool/squid
         cache_dir_size = 50000
         """
 
         cfg = self.ud.getSection('squid')
+	output = []
+	guard_comment = '# added by CernVM contextualization'
 
-        expr=['sed']
+	output.append("max_filedesc 8192")
+	output.append("maximum_object_size 1024 MB")
+	output.append("cache_mem 128 MB")
+	output.append("maximum_object_size_in_memory 128 KB")
 
-        cvmfs_server = 'cernvm-webfs.cern.ch'
-        if 'cvmfs_server' in cfg:
-            cvmfs_server = cfg['cvmfs_server']
-        expr.append('-e')
-        expr.append('s/@cvmfs_server@/%s/g' % cvmfs_server)
-
-        cache_mem = '4096 MB'
-        if 'cache_mem' in cfg:
-            cache_mem = cfg['cache_mem']
-        expr.append('-e')
-        expr.append('s/@cache_mem@/%s/g' % cache_mem)
-
-        maximum_object_size_in_memory = '32 KB'
-        if 'maximum_object_size_in_memory' in cfg:
-            maximum_object_size_in_memory = cfg['maximum_object_size_in_memory']
-        expr.append('-e')
-        expr.append('s/@maximum_object_size_in_memory@/%s/g' % maximum_object_size_in_memory)
-
-        cache_dir = '/var/spool/squid'
+	cache_dir = '/var/spool/squid'
         if 'cache_dir' in cfg:
             cache_dir = cfg['cache_dir']
-        expr.append('-e')
-        expr.append('s/@cache_dir@/%s/g' % cache_dir)
-
-        cache_dir_size = '50000'
+	cache_dir_size = '50000'
         if 'cache_dir_size' in cfg:
             cache_dir_size = cfg['cache_dir_size']
-        expr.append('-e')
-        expr.append('s/@cache_dir_size@/%s/g' % cache_dir_size)
+	output.append("cache_dir ufs %s %s 16 256" % (cache_dir, cache_dir_size))
+		
 
-        expr.append('/etc/squid/squid.conf.cernvm')
-        expr.append('>')
-        expr.append('/etc/squid/squid.conf')
-        
-        os.system(' '.join(expr))
+	if 'backends' in cfg:
+		backends = cfg['backends']
+		servers = backends.split(',')
+		for server in servers:
+			output.append("acl backend dst %s" % server)
+		output.append("http_access allow backend")
 
-
+	if len(output):
+		os.system("sed -i -e '/include \/etc\/squid\/cernvm.conf/d' /etc/squid/squid.conf");
+		for linenum,line in enumerate(fileinput.FileInput("/etc/squid/squid.conf", inplace=1)):
+			if linenum==0:
+				print "include /etc/squid/cernvm.conf"
+			print line.rstrip() 
+		output.append('')
+ 		f = open('/etc/squid/cernvm.conf', 'w')
+		f.write('\n'.join(output))
+		f.close()
+		os.system("sed -i -e '/ulimit -n/d' /etc/sysconfig/squid");
+		f = open('/etc/sysconfig/squid', 'a')
+                f.write('ulimit -n 10000\n')
+                f.close()
+	
+	os.system("/sbin/chkconfig squid on")
+	os.system("/sbin/service squid start")
