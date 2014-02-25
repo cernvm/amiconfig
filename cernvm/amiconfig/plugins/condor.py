@@ -48,6 +48,7 @@ class AMIConfigPlugin(AMIPlugin):
         # slot_user = condor
         # cannonical_user = condor
         extra_vars =
+        use_ips =
         """
 
         cfg = self.ud.getSection('condor')
@@ -71,6 +72,7 @@ class AMIConfigPlugin(AMIPlugin):
 
         # Configured hostname
         assigned_hostname = socket.gethostname()
+        output.append("# Assigned hostname: %s" % assigned_hostname)
 
         # IP address used for outbound connections. Using a dummy UDP
         # IPv4 socket to a known IP (not opening any actual connection)
@@ -82,6 +84,12 @@ class AMIConfigPlugin(AMIPlugin):
         # Hostname obtained through reverse lookup from the IP
         #real_hostname = socket.gethostbyaddr(real_ip)[0]
         real_hostname = socket.getfqdn()
+        output.append("# Real hostname: %s" % real_hostname)
+
+        # Option to always use IP addresses
+        use_ips = ('use_ips' in cfg) and (cfg['use_ips'] == 'true')
+        if use_ips:
+            output.append("# Always using IP addresses per user's choice")
 
         condor_master = ""
         if 'condor_master' in cfg:
@@ -93,10 +101,10 @@ class AMIConfigPlugin(AMIPlugin):
 
             # If there's a mismatch between "real" and "assigned" hostname, use
             # the IP address
-            if assigned_hostname == real_hostname:
-                condor_master = assigned_hostname
-            else:
+            if use_ips or (assigned_hostname != real_hostname):
                 condor_master = real_ip
+            else:
+                condor_master = assigned_hostname
 
             output.append('DAEMON_LIST = COLLECTOR, MASTER, NEGOTIATOR, SCHEDD')
 
@@ -110,7 +118,15 @@ class AMIConfigPlugin(AMIPlugin):
         else:
             output.append("CONDOR_ADMIN = root@%s" % (condor_master))
         if 'uid_domain' in cfg:
-            output.append("UID_DOMAIN = %s" % (cfg['uid_domain']))
+            if cfg['uid_domain'] == '*':
+                output.append("")
+                output.append("# Preserve UID of submitting user")
+                output.append("UID_DOMAIN = *")
+                output.append("TRUST_UID_DOMAIN = True")
+                output.append("SOFT_UID_DOMAIN = True")
+                output.append("")
+            else:
+                output.append("UID_DOMAIN = %s" % (cfg['uid_domain']))
         else:
             output.append("UID_DOMAIN = %s" % condor_domain)
 

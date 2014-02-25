@@ -10,6 +10,10 @@ AMI_DOWNLOAD_RETRIES=2
 # Timeout, in seconds, to retrieve user-data
 AMI_DOWNLOAD_TIMEOUT_S=20
 
+# Lock files: to prevent recontextualization at reboot
+AMI_DONE_USER='/var/lib/amiconfig/user.done'
+AMI_DONE_HEPIX='/var/lib/amiconfig/hepix.done'
+
 if [ "$AMILOGECHO" != '' ] && [ "$AMILOGECHO" != '0' ] ; then
   LOGGER="echo :: "
   PIPELOGGER="cat"
@@ -61,10 +65,15 @@ RetrieveUserData() {
     fi
 
   else
-    RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack
+    RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack || RetrieveUserDataGCE
     if [ $? == 1 ] ; then
-      $LOGGER "No user-data can be retrieved from any location"
-      return 1
+      if [ ! -f /cernvm/extra-user-data ]; then
+        $LOGGER "No user-data can be retrieved from any location"
+        return 1
+      else
+        cat /cernvm/extra-user-data > "$AMICONFIG_LOCAL_USER_DATA"
+        chmod 600 "$AMICONFIG_LOCAL_USER_DATA"
+      fi
     fi
   fi
 
@@ -82,6 +91,10 @@ RetrieveUserData() {
     fi
   fi
 
+  if [ -f /cernvm/extra-user-data ]; then
+    cat /cernvm/extra-user-data >> "$AMICONFIG_LOCAL_USER_DATA"
+  fi
+
   return 0
 
 }
@@ -91,16 +104,21 @@ RetrieveUserData() {
 RetrieveUserDataCvmOnline() {
 
   LOCAL_USER_DATA='/var/lib/amiconfig-online/2007-12-15'
+  CHECK_SILENT='--check-silent'
 
   if [ -e "$LOCAL_USER_DATA/user-data" ] ; then
-    $LOGGER "CernVM Online: local user data found at $LOCAL_USER_DATA"
-    export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
-    export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
-    echo "export AMICONFIG_CONTEXT_URL=$AMICONFIG_CONTEXT_URL" > $AMISETUP
+    if [ "$1" != "$CHECK_SILENT" ] ; then
+      $LOGGER "CernVM Online: local user data found at $LOCAL_USER_DATA"
+      export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+      export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+      echo "export AMICONFIG_CONTEXT_URL=$AMICONFIG_CONTEXT_URL" > $AMISETUP
+    fi
     return 0
   fi
 
-  $LOGGER "CernVM Online: no user-data found at $LOCAL_USER_DATA"
+  if [ "$1" != "$CHECK_SILENT" ] ; then
+    $LOGGER "CernVM Online: no user-data found at $LOCAL_USER_DATA"
+  fi
   return 1
 
 }
@@ -195,6 +213,65 @@ RetrieveUserDataEC2() {
   return 1
 
 }
+
+
+# Trying to contact the GCE metadata server. Returns 0 on success, 1 on
+# failure. The user-data is saved locally
+RetrieveUserDataGCE() {
+  # GCE metadata server versions
+  GCE_API_VERSION="v1"
+  SERVER="169.254.169.254"
+  DEFAULT_URL="http://$SERVER/computeMetadata/${GCE_API_VERSION}/instance/attributes"
+
+  # Local check
+  LOCAL_USER_DATA="/var/lib/amiconfig/${GCE_API_VERSION}"
+  if [ -f $LOCAL_USER_DATA/user-data ] ; then
+    # Found user-data locally. Update configuration
+    # We should just rely on the local user data without actually updating the configuration
+    $LOGGER "GCE: user-data found locally, won't download again: $LOCAL_USER_DATA"
+    export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+    export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+
+    # Proper permissions
+    chmod 0600 "$AMICONFIG_LOCAL_USER_DATA"
+
+    # If we exit here, everything is consistent
+    return 0
+  fi
+
+  # If we are here, no user-data has been found locally. Look for HTTP metadata
+  $LOGGER "GCE: no local user-data found: trying metadata HTTP server $SERVER instead"
+
+  # Remote check. Can we open a TCP connection to the server?
+  nc -w 1 $SERVER 80 > /dev/null 2>&1
+  if [ $? == 0 ] ; then
+    $LOGGER "GCE: metadata server $SERVER seems to respond"
+    LOCAL_USER_DATA="/var/lib/amiconfig/${GCE_API_VERSION}/"
+    REMOTE_USER_DATA="${DEFAULT_URL}/cvm-user-data"
+    DATA=$(wget --header="X-Google-Metadata-Request: True" -t$AMI_DOWNLOAD_RETRIES -T$AMI_DOWNLOAD_TIMEOUT_S -q -O - $REMOTE_USER_DATA 2> /dev/null)
+    if [ $? == 0 ] ; then
+      $LOGGER "GCE: user-data downloaded from $REMOTE_USER_DATA and written locally"
+
+      # Write file there for script
+      mkdir -p "$LOCAL_USER_DATA"
+      echo "$DATA" | base64 -d > "$LOCAL_USER_DATA"/user-data
+      chmod 0600 "$LOCAL_USER_DATA"/user-data
+
+      # Export local location
+      export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+      export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+
+      # Exit consistently (user-data written, env exported, settings saved)
+      return 0
+    fi
+  fi
+
+  # Error condition (no env exported, no file written)
+  $LOGGER "GCE: can't find any user-data"
+  return 1
+
+}
+
 
 # Trying to retrieve user data from CloudStack. The user-data is saved locally.
 # Returns 0 on success, 1 on failure
@@ -337,6 +414,45 @@ Main() {
   # Assert amiconfig executable
   [ -f $AMICONFIG ] && [ -x $AMICONFIG ] || exit 1
 
+  # Parse options
+  FORCE='(none)'
+  MODE='(none)'
+  while [ $# -gt 0 ] ; do
+    if [ "$1" == '--force' ] && [ "$FORCE" == '(none)' ] ; then
+      FORCE=1
+    elif [ "${1:0:1}" != '-' ] && [ "$MODE" == '(none)' ] ; then
+      MODE="$1"
+    fi
+    shift
+  done
+  [ "$FORCE" == '(none)' ] && FORCE=0
+  [ "$MODE" == '(none)' ] && MODE=''
+
+  # Before doing anything, check if context has already been performed
+  case "$MODE" in
+    user)
+      [ ! -e "$AMI_DONE_USER" ] && DO_CONTEXT=1
+    ;;
+    hepix)
+      [ ! -e "$AMI_DONE_HEPIX" ] && DO_CONTEXT=1
+    ;;
+    *)
+      $LOGGER "Invalid parameter. Usage: amiconfig.sh [user|hepix]"
+      exit 2
+    ;;
+  esac
+
+  if [ "$DO_CONTEXT" != 1 ] ; then
+    if [ "$FORCE" == 1 ] ; then
+      # Forcing
+      $LOGGER "Contextualization for $MODE already run, forcing anyway as per explicit request"
+    else
+      # Don't recontextualize: exit now
+      $LOGGER "Contextualization for $MODE already run, skipping (force with --force)"
+      exit 0
+    fi
+  fi
+
   # Retrieve user-data. After calling this function, in case of success, we
   # have a consistent environment:
   #  - user-data, uncompressed, locally available at AMICONFIG_LOCAL_USER_DATA
@@ -353,14 +469,18 @@ Main() {
   $LOGGER " * AMICONFIG_CONTEXT_URL=$AMICONFIG_CONTEXT_URL"
   $LOGGER " * AMICONFIG_LOCAL_USER_DATA=$AMICONFIG_LOCAL_USER_DATA"
 
-  case $1 in
+  case "$MODE" in
     user)
       RunUserDataScript before
       $AMICONFIG 2>&1 #| $PIPELOGGER
       RunUserDataScript after
+      mkdir -p `dirname "$AMI_DONE_USER"`
+      touch "$AMI_DONE_USER"
     ;;
     hepix)
       $AMICONFIG -f hepix
+      mkdir -p `dirname "$AMI_DONE_HEPIX"`
+      touch "$AMI_DONE_HEPIX"
     ;;
   esac
 }

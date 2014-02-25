@@ -17,6 +17,7 @@ all: subdirs
 SUBDIRS=
 
 python_files = \
+appliance-agent.py \
 cernvm.py \
 condor.py \
 ganglia.py \
