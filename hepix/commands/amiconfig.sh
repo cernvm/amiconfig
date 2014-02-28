@@ -381,29 +381,39 @@ RunUserDataScript() {
 
   case $1 in
     before)
-      sed -n '/#!.*sh.*before/,/^exit/p' $TMP_USER_DATA | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$USER_DATA".sh
-      if [ ! -s $"USER_DATA".sh ] ; then
+      sed -n '/#!.*sh.*before/,/^exit/p' $TMP_USER_DATA | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
+      if [ -s "$TMP_USER_DATA".sh ] ; then
         awk '/#!.*sh/,/^$/ {print}' "$TMP_USER_DATA" > "$TMP_USER_DATA".sh
-        rm -f "$TMP_USER_DATA"
+      else
+        rm -f "$TMP_USER_DATA".sh
       fi
+      rm -f "$TMP_USER_DATA"
     ;;
 
     after)
-      sed -n '/#!.*sh.*after/,/^exit/p' "$TMP_USER_DATA" | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
+      sed -n '/#!.*sh\(.*after\|$\)/,/^exit/p' "$TMP_USER_DATA" | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
+      if [ -s "$TMP_USER_DATA".sh ] ; then
+        awk '/#!.*sh/,/^$/ {print}' "$TMP_USER_DATA" > "$TMP_USER_DATA".sh
+      else
+        rm -f "$TMP_USER_DATA".sh
+      fi
       rm -f "$TMP_USER_DATA"
     ;;
 
     *)
       # Unknown option
+      rm -f "$TMP_USER_DATA"
       return 1
     ;;
   esac
 
-  $LOGGER "Running user-data [$1]"
-  chmod +x "$TMP_USER_DATA".sh
-  "$TMP_USER_DATA".sh 2>&1 | $PIPELOGGER
-  $LOGGER "user-data script exit code: $?"
-  rm -f "$TMP_USER_DATA".sh
+  if [ -f "$TMP_USER_DATA".sh ]; then
+    $LOGGER "Running user-data [$1]"
+    chmod +x "$TMP_USER_DATA".sh
+    "$TMP_USER_DATA".sh 2>&1 | $PIPELOGGER
+    $LOGGER "user-data script exit code: $?"
+    rm -f "$TMP_USER_DATA".sh
+  fi
 
   return 0
 }
