@@ -382,16 +382,20 @@ RunUserDataScript() {
   case $1 in
     before)
       sed -n '/#!.*sh.*before/,/^exit/p' $TMP_USER_DATA | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
-      if [ -s $"TMP_USER_DATA".sh ] ; then
+      if [ -s "$TMP_USER_DATA".sh ] ; then
         awk '/#!.*sh/,/^$/ {print}' "$TMP_USER_DATA" > "$TMP_USER_DATA".sh
+      else
+        rm -f "$TMP_USER_DATA".sh
       fi
       rm -f "$TMP_USER_DATA"
     ;;
 
     after)
-      sed -n '/#!.*sh.*after/,/^exit/p' "$TMP_USER_DATA" | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
-      if [ -s $"TMP_USER_DATA".sh ] ; then
+      sed -n '/#!.*sh\(.*after\|$\)/,/^exit/p' "$TMP_USER_DATA" | sed  -e 's/\(#!.*\) \(.*\)/\1/' > "$TMP_USER_DATA".sh
+      if [ -s "$TMP_USER_DATA".sh ] ; then
         awk '/#!.*sh/,/^$/ {print}' "$TMP_USER_DATA" > "$TMP_USER_DATA".sh
+      else
+        rm -f "$TMP_USER_DATA".sh
       fi
       rm -f "$TMP_USER_DATA"
     ;;
