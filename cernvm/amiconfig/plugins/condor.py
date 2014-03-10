@@ -57,7 +57,15 @@ class AMIConfigPlugin(AMIPlugin):
             hostname = cfg['hostname']
             util.call(['hostname', hostname])
 
+        # Array of lines of the condor_config.local file (will be rewritten)
         output = []
+
+        # Dictionary of entries to go in the condor_config file (will be updated)
+        condor_config_entries = {
+            'NO_DNS': None,
+            'DEFAULT_DOMAIN_NAME': None,
+            'NETWORK_INTERFACE': None
+        }
 
         output.append('# Generated using the CernVM amiconfig Condor plugin')
 
@@ -90,6 +98,9 @@ class AMIConfigPlugin(AMIPlugin):
         use_ips = ('use_ips' in cfg) and (cfg['use_ips'] == 'true')
         if use_ips:
             output.append("# Always using IP addresses per user's choice")
+            condor_config_entries['NO_DNS'] = 'True'
+            condor_config_entries['DEFAULT_DOMAIN_NAME'] = 'virtual-analysis-facility'
+            condor_config_entries['NETWORK_INTERFACE'] = real_ip
 
         condor_master = ""
         if 'condor_master' in cfg:
@@ -186,7 +197,46 @@ class AMIConfigPlugin(AMIPlugin):
         if 'extra_vars' in cfg:
             output = output + cfg['extra_vars'].split(',');
 
-        # Write the configuration file
+        # Mangle the main condor_config configuration file
+        conf_file_name = '/etc/condor/condor_config'
+        conf_file_bak  = conf_file_name + '.0'
+        try:
+            os.rename( conf_file_name, conf_file_bak )
+        except OSError as e:
+            print "Cannot rename %s to %s: %s" % (conf_file_name, conf_file_bak, e)
+            return
+
+        try:
+            fo = open(conf_file_name, 'a')
+            fi = open(conf_file_bak, 'r')
+            for line in fi:
+                omit = False
+                for key in condor_config_entries:
+                    # Check for the equiv. of ^KEY[ \t=]
+                    new_line = line.lstrip()
+                    len_key = len(key)
+                    next_char = new_line[len_key:len_key+1]
+                    if new_line.startswith(key) and ( next_char == ' ' or next_char == '\t' or next_char == '=' ):
+                       omit = True
+                if omit == False:
+                    fo.write( line )
+            for key,val in condor_config_entries.iteritems():
+                if val is None:
+                    break
+                fo.write( "%s = %s\n" % (key, val) )
+            fi.close()
+            fo.close()
+        except IOError as e:
+            print "Error while modifying main configuration file: %s" % e
+            return
+
+        try:
+            os.remove(conf_file_bak)
+        except OSError as e:
+            print "Cannot remove %s" % conf_file_bak
+            # non-fatal
+
+        # Write the condor_config.local configuration file
         if len(output):
             f = open('/etc/condor/condor_config.local', 'w')
             f.write('\n'.join(output))
