@@ -86,7 +86,7 @@ class AMIConfigPlugin(AMIPlugin):
             base64.encode(ud, b64d)
             ud.close()
             if not 'elastiq' in cfgvar:
-                cfgvar['elastiq'] = None
+                cfgvar['elastiq'] = {}
             cfgvar['elastiq']['user_data_b64'] = b64d.getvalue().replace('\n', '')
             b64d.close()
 
