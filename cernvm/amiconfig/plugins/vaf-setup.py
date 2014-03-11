@@ -47,7 +47,9 @@ class AMIConfigPlugin(AMIPlugin):
 
         sudoers = '/etc/sudoers'
 
-        print "con gioia"
+        sssd_conf = '/etc/sssd/sssd.conf'
+        nscd_conf = '/etc/nscd.conf'
+
         cfgraw = self.ud.getSection('vaf-setup')
 
         #
@@ -290,16 +292,88 @@ SSLVerifyDepth 10
                 os.system("adduser pool%03u -s /bin/bash -u %u -g 50000" % (i, 50000+i))
 
         elif auth_method == 'alice_ldap':
-            pass
 
-          # # Make chmod resilient: cloud-init tends to change permissons of the
-          # # AuthorizedKeysDir, so run chmod *after* it to restore *our* perms
-          # local ChmodLine="chmod 0755 \"$AuthorizedKeysDir\""
-          # local RcLocal='/etc/rc.d/rc.local'
-          # cat "$RcLocal" | grep -v "$ChmodLine" > "$RcLocal".0
-          # echo "$ChmodLine" >> "$RcLocal".0
-          # mv "$RcLocal".0 "$RcLocal"
-          # chmod 0755 "$RcLocal"  # make it executable
+            # Create special 'alice' group
+            os.system('groupadd -g 1395 alice')
+
+            # Configuring SSSD
+            try:
+                f = open(sssd_conf, 'w')
+                f.write("""
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = default
+
+[nss]
+filter_users = root,ldap,named,avahi,haldaemon,dbus,radiusd,news,nscd
+override_shell = /bin/bash
+override_homedir = /home/%u
+#override_gid = 99
+
+[pam]
+
+[domain/default]
+ldap_tls_reqcert = never
+auth_provider = ldap
+ldap_schema = rfc2307bis
+ldap_search_base = ou=People,o=alice,dc=cern,dc=ch
+ldap_group_member = uniquemember
+id_provider = ldap
+ldap_id_use_start_tls = False
+ldap_uri = ldap://aliendb06a.cern.ch:8389/
+cache_credentials = True
+ldap_tls_cacertdir = /etc/openldap/cacerts
+entry_cache_timeout = 600
+ldap_network_timeout = 3
+ldap_access_filter = (objectclass=posixaccount)
+ldap_user_uid_number = CCID
+""")
+                f.close()
+            except IOError as e:
+                print 'Cannot write SSSD configuration %s: %s' % (sssd_conf, e)
+                return
+
+            # Mode
+            try:
+                os.chmod(sssd_conf, 0600)
+            except os.error:
+                print 'Cannot change permissions of %s' % sssd_conf
+                return
+
+            # Enable auth options: notably, sssd (for LDAP) and mkhomedir
+            r = os.system('authconfig --enablesssd --enablesssdauth ' +
+                '--enablelocauthorize --enablemkhomedir --update')
+            if r != 0:
+                print 'Cannot enable authentication mechanism'
+                return
+
+            # Restart sssd
+            os.system("/sbin/chkconfig sssd on")
+            os.system("/sbin/service sssd restart")
+
+            # Disable nscd cache on users and groups: sssd has its own
+            try:
+                f = open(nscd_conf, 'r')
+                lines = f.readlines()
+                f.close()
+                recache = r'^[ \t]*enable-cache[ \t]+(group|passwd)[ \t]+.*$'
+                f = open(nscd_conf, 'w')
+                for l in lines:
+                    if not re.match(recache, l):
+                        f.write(l)
+                f.write('enable-cache passwd no\n')
+                f.write('enable-cache group no\n')
+                f.close()
+            except IOError as e:
+                print 'Problem configuring %s: %s' % (sshd_conf, e)
+
+            # Clean nscd caches and reload configuration
+            os.system("/sbin/service nscd reload")
+            os.system("/sbin/service nscd restart")
+
+            # Hook in rc.local to fix auth_keys_dir permission messed up by
+            # cloud-init --> should be no longer needed
 
 
     def get_ipv4(self):
