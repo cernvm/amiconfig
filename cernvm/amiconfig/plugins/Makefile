@@ -21,7 +21,7 @@ amildap.py \
 appliance-agent.py \
 cernvm.py \
 condor.py \
-elastiq-setup.py
+elastiq-setup.py \
 ganglia.py \
 nss.py \
 puppet.py \
