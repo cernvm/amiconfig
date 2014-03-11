@@ -17,16 +17,16 @@ all: subdirs
 SUBDIRS=
 
 python_files = \
+amildap.py \
 appliance-agent.py \
 cernvm.py \
 condor.py \
+elastiq-setup.py
 ganglia.py \
-ldap.py \
 nss.py \
 puppet.py \
 squid.py \
 tcpbuffers.py \
-configscripts.py \
 yp.py \
 workqueue.py
 
