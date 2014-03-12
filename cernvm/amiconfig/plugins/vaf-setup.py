@@ -82,6 +82,9 @@ class AMIConfigPlugin(AMIPlugin):
     # Configuration for nscd
     nscd_conf = '/etc/nscd.conf'
 
+    # The rc.local file
+    rc_local = '/etc/rc.local'
+
 
     def configure(self):
         """
@@ -308,9 +311,6 @@ AllowOverride all
         except OSError:
             pass
 
-        # Hackish hook in rc.local to fix auth_keys_dir permission messed up by
-        # cloud-init --> should be no longer needed
-
         try:
             f = open(self.sshd_conf, 'r')
             lines = f.readlines()
@@ -324,6 +324,24 @@ AllowOverride all
             f.close()
         except IOError as e:
             print 'Problem configuring %s: %s' % (self.sshd_conf, e)
+
+        # Hook in rc.local to fix permissions that will be changed afterwards
+        # by cloud-init
+        try:
+            f = open(self.rc_local, 'r')
+            lines = f.readlines()
+            f.close()
+            rechmod = r'\s*chmod\s+0755\s+.*%s' % re.escape( self.auth_keys_dir )
+            f = open(self.rc_local, 'w')
+            for l in lines:
+                if not re.match(rechmod, l):
+                    f.write(l)
+            f.write('chmod 0755 \"%s\"\n' % self.auth_keys_dir)
+            f.close()
+            os.chown(self.rc_local, 0, 0)
+            os.chmod(self.rc_local, 0755)
+        except (IOError, OSError) as e:
+            print 'Problem writing permissions hook %s: %s' % (self.rc_local, e)
 
         # sudoers
         try:
