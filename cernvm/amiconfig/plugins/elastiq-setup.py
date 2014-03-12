@@ -92,8 +92,8 @@ class AMIConfigPlugin(AMIPlugin):
             cfgvar['ec2']['user_data_b64'] = b64d.getvalue().replace('\n', '')
             b64d.close()
 
-        except IOError as e:
-            print 'Cannot read user-data of workers %s: %s' % (worker_ud, e)
+        except IOError:
+            pass
 
         #
         # Configuration file contains sensitive information: chown/chmod
