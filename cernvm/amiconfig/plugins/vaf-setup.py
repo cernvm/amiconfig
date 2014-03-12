@@ -12,6 +12,7 @@ import string
 import time
 import socket
 import re
+import subprocess
 
 from amiconfig.errors import *
 from amiconfig.lib import util
@@ -37,6 +38,21 @@ class AMIConfigPlugin(AMIPlugin):
     # The pool_users plugin requires a mapfile
     auth_mapfile = '/etc/sshcertauth-x509-map'
 
+    # Base uid for pool accounts
+    pool_base_uid = 50000
+
+    # Pool group name
+    pool_group = 'pool'
+
+    # Pool group gid
+    pool_gid = 50000
+
+    # ALICE group name
+    alice_group = 'alice'
+
+    # ALICE group gid
+    alice_gid = 1395
+
     # User of apache2 (httpd)
     httpd_user = 'apache'
 
@@ -45,6 +61,10 @@ class AMIConfigPlugin(AMIPlugin):
 
     # Where to store the host certificate and private key
     ssl_dir = '/etc/grid-security'
+
+    # Path of recognized CAs
+    ssl_ca_path = '/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security/certificates'
+    #ssl_ca_path = /cvmfs/alice.cern.ch/x86_64-2.6-gnu-4.1.2/Packages/AliEn/v2-19/api/share/certificates
 
     # crontab file for purging expired keys
     cron_expiry = '/etc/cron.d/sshcertauth'
@@ -67,16 +87,13 @@ class AMIConfigPlugin(AMIPlugin):
         [vaf-setup]
         client_settings=alice
         node_type=[master|slave]  # defaults to slave
-        auth_method=[alice_ldap|pool_users|<none>]  # defaults to none
-        num_pool_accounts=50  # must be specified if auth_method==pool_users
+        auth_method=[alice_ldap|pool_users|<none>]  # defaults to <none>
+        num_pool_accounts=50  # mandatory if auth_method==pool_users
         """
 
         cfgraw = self.ud.getSection('vaf-setup')
 
-        #
-        # Authentication method validation
-        #
-
+        # Validate auth_method: abort on error
         if 'auth_method' in cfgraw:
             auth_method = cfgraw['auth_method']
             if auth_method == 'pool_users':
@@ -103,35 +120,39 @@ class AMIConfigPlugin(AMIPlugin):
             # No authentication method specified: don't config sshcertauth
             auth_method = None
 
+
         if 'node_type' in cfgraw and cfgraw['node_type'] == 'master' and auth_method is not None:
+            # On master and with some auth_method: sshcertauth
 
-            #
-            # Configure sshcertauth
-            #
-
-            # Parent creation
+            # Parent directory
             parent = os.path.dirname( self.sshcertauth_dst )
             if not os.path.isdir(parent):
                 try:
                     os.makedirs(parent, 0755)
-                except os.error as e:
-                    print "Cannot create directory %s: %s" % (parent, e)
+                except OSError as e:
+                    pass
 
             # Symlink
             try:
                 if os.path.islink( self.sshcertauth_dst ):
                     os.unlink( self.sshcertauth_dst )
                 os.symlink(self.sshcertauth_src, self.sshcertauth_dst)
-            except os.error as e:
+            except OSError as e:
                 print "Cannot create symbolic link %s: %s" % (self.sshcertauth_dst, e)
                 return
 
-            # Create the configuration file for sshcertauth
+            # Create config file for sshcertauth
             parent = os.path.dirname(self.sshcertauth_conf)
             try:
                 os.mkdir(parent, 0755)
-            except os.error as e:
+            except OSError as e:
                 pass
+
+            try:
+                os.chown(self.sshcertauth_conf, 0, 0)
+                os.chmod(self.sshcertauth_conf, 0644)
+            except OSError as e:
+                print "Cannot change permissions of %s: %s" % (self.sshcertauth_conf, e)
 
             try:
                 f = open( self.sshcertauth_conf, 'w' )
@@ -164,30 +185,10 @@ class AMIConfigPlugin(AMIPlugin):
                 print "Cannot write configuration %s: %s" % (self.sshcertauth_conf, e)
                 return
 
-            # Mapfile with appropriate permissions (rw for httpd user)
-            if not os.path.isfile(self.auth_mapfile):
-                try:
-                    f = open(self.auth_mapfile, 'w')
-                except IOError as e:
-                    print "Cannot create mapfile %s: %s" % (self.auth_mapfile, e)
-                    return
-            try:
-                httpd_uid = pwd.getpwnam(self.httpd_user).pw_uid
-            except KeyError:
-                print 'Cannot find user %s' % self.httpd_user
-                return
-
-            try:
-                os.chown(self.auth_mapfile, httpd_uid, -1)
-                os.chmod(self.auth_mapfile, 0600)
-            except OSError as e:
-                print 'Cannot chown/chmod %s: %s' % (self.auth_mapfile, e)
-                return
-
-            # Create the configuration file for apache2 (TODO: improve)
+            # Create the configuration file for apache2 (TODO: it is a little bit convoluted)
             try:
                 f = open(self.httpd_ssl_conf, 'w')
-                f.write("""
+                f.write( string.Template("""
 LoadModule ssl_module modules/mod_ssl.so
 Listen 443
 AddType application/x-x509-ca-cert .crt
@@ -218,51 +219,63 @@ SetEnvIf User-Agent ".*MSIE.*" \\
 CustomLog logs/ssl_request_log \\
           "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \\"%r\\" %b"
 ### Customized for sshcertauth ###
-SSLCertificateFile /etc/grid-security/hostcert.pem
-SSLCertificateKeyFile /etc/grid-security/hostkey.pem
-#SSLCACertificatePath /cvmfs/alice.cern.ch/x86_64-2.6-gnu-4.1.2/Packages/AliEn/v2-19/api/share/certificates
-SSLCACertificatePath /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security/certificates
+SSLCertificateFile ${SSL_DIR}/hostcert.pem
+SSLCertificateKeyFile ${SSL_DIR}/hostkey.pem
+SSLCACertificatePath ${SSL_CA_PATH}
 SSLVerifyDepth 10
-<Directory /var/www/html/auth>
+<Directory ${SSHCERTAUTH_DST}/auth>
   SSLVerifyClient require
   SSLOptions +StdEnvVars +ExportCertData
   AllowOverride all
 </Directory>
 </VirtualHost>
-""")
+"""
+                    ).safe_substitute({
+                        'SSHCERTAUTH_DST': self.sshcertauth_dst,
+                        'SSL_DIR': self.ssl_dir,
+                        'SSL_CA_PATH': self.ssl_ca_path
+                    }) )
+
                 f.close()
             except IOError as e:
                 print 'Cannot write %s: %s' % (self.httpd_ssl_conf, e)
 
-            # Create a new self-signed certificate
-            try:
-                os.mkdir(self.ssl_dir, 0755)
-            except os.error:
-                pass
+            # Create a new self-signed certificate if necessary
+            if not os.path.isfile(self.ssl_dir+'/hostcert.pem') or not os.path.isfile(self.ssl_dir+'/hostkey.pem'):
 
-            my_ipv4 = self.get_ipv4()
-            r = os.system( string.Template('openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 ' +
-                '-subj "/CN=${MY_IPV4}" ' +
-                '-keyout ${SSL_DIR}/hostkey.pem ' +
-                '-out ${SSL_DIR}/hostcert.pem').substitute({
-                    'SSL_DIR': self.ssl_dir,
-                    'MY_IPV4': my_ipv4
-                }) )
-            if r != 0:
-                print 'Error generating certificate and keys'
-                return
+                try:
+                    os.mkdir(self.ssl_dir, 0755)
+                except OSError:
+                    pass
+
+                my_ipv4 = self.get_ipv4()
+
+                openssl_cmd = 'openssl req -new -newkey rsa:2048 -days 365 -nodes -x509'.split(' ')
+                openssl_cmd.extend([ '-subj', '/CN='+my_ipv4 ])
+                openssl_cmd.extend([ '-keyout', self.ssl_dir+'/hostkey.pem'])
+                openssl_cmd.extend([ '-out', self.ssl_dir+'/hostcert.pem'])
+
+                try:
+                    r = subprocess.call(openssl_cmd)
+                except OSError as e:
+                    print "Cannot invoke openssl: %s" % e
+                    return
+
+                if r != 0:
+                    print "Error generating certificate and keys: %d" % r
+                    return
 
             try:
                 os.chmod(self.ssl_dir + '/hostcert.pem', 0444)
                 os.chmod(self.ssl_dir + '/hostkey.pem', 0400)
-            except os.error:
+            except OSError:
                 print 'Cannot change mode of certificate/key'
                 return
 
-            # Enable keys expiration
+            # Enable keys expiration (via crontab)
             try:
                 f = open(self.cron_expiry, 'w')
-                f.write('*/5 * * * * root /var/www/html/auth/keys_keeper.sh expiry\n')
+                f.write('*/5 * * * * root %s/keys_keeper.sh expiry\n' % self.sshcertauth_dst)
                 f.close()
             except IOError as e:
                 print 'Cannot write %s: %s' % (self.cron_expiry, e)
@@ -274,7 +287,7 @@ SSLVerifyDepth 10
                 root_key = '/root/.ssh/authorized_keys'
                 if os.path.isfile(root_key):
                     os.symlink(root_key, self.auth_keys_dir + '/root')
-            except os.error:
+            except OSError:
                 pass
 
             try:
@@ -308,22 +321,74 @@ SSLVerifyDepth 10
                 print 'Problem configuring %s: %s' % (self.sshd_conf, e)
 
             # Restart affected services
-            os.system("/sbin/service sshd restart")
-            os.system("/sbin/service httpd restart")
+            with open(os.devnull, 'w') as devnull:
+                try:
+                    rs = subprocess.call('/sbin/service sshd restart'.split(' '), stdout=devnull)
+                    if rs != 0:
+                        print "Error while restarting sshd: %d" % rs
+                        return
+                    rh = subprocess.call('/sbin/service httpd restart'.split(' '), stdout=devnull)
+                    if rh != 0:
+                        print "Error while restarting httpd: %d" % rh
+                        return
+                except OSError as e:
+                    print "Error restarting services: %s" % e
+                    return
 
             ## end of sshcertauth ##
 
         if auth_method == 'pool_users':
 
-            # Create pool accounts
-            os.system("groupadd -g 50000 pool")
-            for i in range(1, num_pool_accounts+1):
-                os.system("adduser pool%03u -s /bin/bash -u %u -g 50000" % (i, 50000+i))
+            # Mapfile with appropriate permissions (rw for httpd user)
+            try:
+                if not os.path.isfile(self.auth_mapfile):
+                    f = open(self.auth_mapfile, 'w')
+                    f.close()
+
+                httpd_uid = pwd.getpwnam(self.httpd_user).pw_uid
+                os.chown(self.auth_mapfile, httpd_uid, 0)
+                os.chmod(self.auth_mapfile, 0600)
+
+            except (IOError, OSError, KeyError) as e:
+                print "Cannot create mapfile %s with proper permissions: %s" % (self.auth_mapfile, e)
+                return
+
+            # Create pool group and accounts
+            with open(os.devnull, 'w') as devnull:
+                try:
+
+                    r = subprocess.call(('groupadd -g %d %s' % (self.pool_gid, self.pool_group)).split(' '), stdout=devnull, stderr=devnull)
+                    if r != 0 and r != 9:
+                        print "Error creating group %s: %d" % (self.pool_group, r)
+                        return
+
+                    for i in range(1, num_pool_accounts+1):
+
+                        r = subprocess.call(
+                            ('adduser pool%03u -s /bin/bash -u %u -g %d' % (i, self.pool_base_uid+i, self.pool_gid)).split(' '),
+                            stdout=devnull,
+                            stderr=devnull
+                        )
+                        # r == 9 means that the user already exists: this is OK
+                        if r != 0 and r != 9:
+                            print "Error creating user pool%03u: %d" % (i, r)
+                            return
+
+                except OSError as e:
+                    print "Cannot create users and group: %s" % e
+                    return
 
         elif auth_method == 'alice_ldap':
 
-            # Create special 'alice' group
-            os.system('groupadd -g 1395 alice')
+            # Create special ALICE group
+            with open(os.devnull, 'w') as devnull:
+                try:
+                    r = subprocess.call( ('groupadd -g %d %s' % (self.alice_gid, self.alice_group)).split(' '), stdout=devnull, stderr=devnull )
+                    if r != 0 and r != 9:
+                        print "Error creating ALICE group %s: %d" % (self.alice_group, r)
+                except OSError as e:
+                    print "Cannot create ALICE group: %s" % e
+                    return
 
             # Configuring SSSD
             try:
@@ -366,20 +431,35 @@ ldap_user_uid_number = CCID
             # Mode
             try:
                 os.chmod(self.sssd_conf, 0600)
-            except os.error:
+            except OSError:
                 print 'Cannot change permissions of %s' % self.sssd_conf
                 return
 
             # Enable auth options: notably, sssd (for LDAP) and mkhomedir
-            r = os.system('authconfig --enablesssd --enablesssdauth ' +
-                '--enablelocauthorize --enablemkhomedir --update')
-            if r != 0:
-                print 'Cannot enable authentication mechanism'
-                return
+            with open(os.devnull, 'w') as devnull:
 
-            # Restart sssd
-            os.system("/sbin/chkconfig sssd on")
-            os.system("/sbin/service sssd restart")
+                try:
+                    r = subprocess.call( ('authconfig --enablesssd --enablesssdauth ' +
+                        '--enablelocauthorize --enablemkhomedir --update').split(' '), stdout=devnull )
+                    if r != 0:
+                        print "Error configuring the authentication mechanism: %d" % r
+                        return
+                except OSError as e:
+                    print "Cannot call authconfig: %s" % e
+                    return
+
+                try:
+                    rc = subprocess.call('/sbin/chkconfig sssd on'.split(' '))
+                    if rc != 0:
+                        print "Error while enabling sssd: %d" % rc
+                        return
+                    rs = subprocess.call('/sbin/service sssd restart'.split(' '), stdout=devnull)
+                    if rs != 0:
+                        print "Error while restarting sssd: %d" % rs
+                        return
+                except OSError as e:
+                    print "Error restarting services: %s" % e
+                    return
 
             # Disable nscd cache on users and groups: sssd has its own
             try:
@@ -397,9 +477,21 @@ ldap_user_uid_number = CCID
             except IOError as e:
                 print 'Problem configuring %s: %s' % (self.sshd_conf, e)
 
-            # Clean nscd caches and reload configuration
-            os.system("/sbin/service nscd reload")
-            os.system("/sbin/service nscd restart")
+            # Flush nscd cache and restart service
+            with open(os.devnull, 'w') as devnull:
+
+                try:
+                    rs = subprocess.call('/sbin/service nscd restart'.split(' '), stdout=devnull)
+                    if rs != 0:
+                        print "Error while restarting nscd: %d" % rs
+                        return
+                    rl = subprocess.call('/sbin/service nscd reload'.split(' '), stdout=devnull)
+                    if rl != 0:
+                        print "Error while reloading nscd: %d" % rl
+                        return
+                except OSError as e:
+                    print "Error with the nscd service: %s" % e
+                    return
 
             # Hook in rc.local to fix auth_keys_dir permission messed up by
             # cloud-init --> should be no longer needed
