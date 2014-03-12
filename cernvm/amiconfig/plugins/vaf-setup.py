@@ -526,13 +526,16 @@ ldap_user_uid_number = CCID
 
 
     def get_ipv4(self):
-      try:
-        # No data is actually transmitted (UDP)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect( ('8.8.8.8', 53) )
-        real_ip = s.getsockname()[0]
-        s.close()
-        return real_ip
-      except socket.error as e:
-        print "Cannot retrieve current IPv4 address: %s" % e
-        return
+        """Guesses the IP(v4) of current host used for opening "outbound"
+        connections.
+        """
+        try:
+            # No data is actually transmitted (UDP)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect( ('8.8.8.8', 53) )
+            real_ip = s.getsockname()[0]
+            s.close()
+            return real_ip
+        except socket.error as e:
+            print "Cannot retrieve current IPv4 address: %s" % e
+            return
