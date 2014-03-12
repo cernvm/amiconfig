@@ -79,21 +79,21 @@ class AMIConfigPlugin(AMIPlugin):
             else:
                 cfgvar[section][key] = v
 
-        # Base64'd version of the user-data for workers ("scalable services")
+        # Base64'd version of the user-data for workers ("scalable services").
+        # If the file worker_ud is present, it is base64'd and it overrides any
+        # existing variable already specified.
         try:
             b64d = StringIO.StringIO()
             ud = open(worker_ud, 'r')
             base64.encode(ud, b64d)
             ud.close()
-            if not 'elastiq' in cfgvar:
-                cfgvar['elastiq'] = {}
-            cfgvar['elastiq']['user_data_b64'] = b64d.getvalue().replace('\n', '')
+            if not 'ec2' in cfgvar:
+                cfgvar['ec2'] = {}
+            cfgvar['ec2']['user_data_b64'] = b64d.getvalue().replace('\n', '')
             b64d.close()
 
         except IOError as e:
-            print 'Cannot open user-data of workers %s: %s' % (worker_ud, e)
-            if 'elastiq' in cfgvar:
-                cfgvar['elastiq'].pop('user_data_b64', None)
+            print 'Cannot read user-data of workers %s: %s' % (worker_ud, e)
 
         #
         # Configuration file contains sensitive information: chown/chmod
@@ -105,7 +105,7 @@ class AMIConfigPlugin(AMIPlugin):
             uid = pwd.getpwnam('elastiq').pw_uid
             gid = grp.getgrnam('elastiq').gr_gid
         except KeyError as e:
-            print 'Cannot find elastiq user/group: %s' % elastiq
+            print 'Cannot find elastiq user/group: %s' % e
             return # cannot continue
 
         # Create empty file
