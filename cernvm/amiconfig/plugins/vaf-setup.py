@@ -166,12 +166,6 @@ class AMIConfigPlugin(AMIPlugin):
             pass
 
         try:
-            os.chown(self.sshcertauth_conf, 0, 0)
-            os.chmod(self.sshcertauth_conf, 0644)
-        except OSError as e:
-            print "Cannot change permissions of %s: %s" % (self.sshcertauth_conf, e)
-
-        try:
             f = open( self.sshcertauth_conf, 'w' )
             lines = [
                 '<?php',
@@ -201,6 +195,13 @@ class AMIConfigPlugin(AMIPlugin):
         except IOError as e:
             print "Cannot write configuration %s: %s" % (self.sshcertauth_conf, e)
             return False
+
+        try:
+            os.chown(self.sshcertauth_conf, 0, 0)
+            os.chmod(self.sshcertauth_conf, 0644)
+        except OSError as e:
+            print "Cannot change permissions of %s: %s" % (self.sshcertauth_conf, e)
+            return
 
         # Create the configuration file for apache2 (TODO: it is a little bit convoluted)
         try:
@@ -240,7 +241,7 @@ SSLCertificateFile ${SSL_DIR}/hostcert.pem
 SSLCertificateKeyFile ${SSL_DIR}/hostkey.pem
 SSLCACertificatePath ${SSL_CA_PATH}
 SSLVerifyDepth 10
-<Directory ${SSHCERTAUTH_DST}/auth>
+<Directory ${SSHCERTAUTH_DST}>
 SSLVerifyClient require
 SSLOptions +StdEnvVars +ExportCertData
 AllowOverride all
