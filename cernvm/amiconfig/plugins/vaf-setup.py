@@ -85,6 +85,9 @@ class AMIConfigPlugin(AMIPlugin):
     # The rc.local file
     rc_local = '/etc/rc.local'
 
+    # VAF client configuration directory
+    vafcli_conf_dir = '/etc/vaf'
+
 
     def configure(self):
         """
@@ -124,20 +127,41 @@ class AMIConfigPlugin(AMIPlugin):
             # No authentication method specified: don't config sshcertauth
             auth_method = None
 
-
         # On master and with some authentication method defined: sshcertauth
         if 'node_type' in cfgraw and cfgraw['node_type'] == 'master' and auth_method is not None:
 
             if self.config_sshcertauth(auth_method, num_pool_accounts) == False:
                 return
 
+        # On every node, only if auth_method is valid
         if auth_method == 'pool_users':
             if self.config_pool_users(num_pool_accounts) == False:
                 return
-
         elif auth_method == 'alice_ldap':
             if self.config_alice_ldap() == False:
                 return
+
+        # On master: client settings, if defined
+        if 'client_settings' in cfgraw:
+            client_settings = cfgraw['client_settings']
+            custom_settings = {}
+            for k in cfgraw:
+                if k.startswith(client_settings):
+                    custom_settings[ k[len(client_settings)+1:] ] = cfgraw[k]
+
+            # Symbolic link
+            try:
+                if os.path.islink( self.vafcli_conf_dir+'/default' ):
+                    os.unlink( self.vafcli_conf_dir+'/default' )
+                os.symlink(client_settings, self.vafcli_conf_dir+'/default')
+            except OSError as e:
+                print "Cannot create symbolic link in %s: %s --> default: %s" % (self.vafcli_conf_dir, client_settings, e)
+                return False
+
+            # LBYL (for security reasons)
+            cli_func = 'config_client_%s' % client_settings
+            if cli_func in dir(self) and callable( eval('self.'+cli_func) ):
+                if eval('self.'+cli_func+'(custom_settings)') == False: return
 
 
     def config_sshcertauth(self, auth_method, num_pool_accounts):
@@ -558,3 +582,22 @@ ldap_user_uid_number = CCID
         except socket.error as e:
             print "Cannot retrieve current IPv4 address: %s" % e
             return
+
+
+    def config_client_alice(self, opts):
+        """Configures the VAF client for ALICE.
+        """
+
+        try:
+            se = opts['storage']
+        except KeyError:
+            se = 'alien://<path>'
+
+        try:
+            with open(self.vafcli_conf_dir+'/alice/remote.before', 'w') as f:
+                f.write('export VafDataSetStorage=\"%s\"\n' % se)
+        except IOError as e:
+            print "Cannot write ALICE configuration: %s" % e
+            return False
+
+        return True
