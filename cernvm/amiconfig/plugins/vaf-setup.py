@@ -141,7 +141,7 @@ class AMIConfigPlugin(AMIPlugin):
             if self.config_alice_ldap() == False:
                 return
 
-        # On master: client settings, if defined
+        # If defined, configure experiment-specific settings for the VAF client
         if 'client_settings' in cfgraw:
             client_settings = cfgraw['client_settings']
             custom_settings = {}
