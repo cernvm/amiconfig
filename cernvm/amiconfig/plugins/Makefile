@@ -28,6 +28,7 @@ puppet.py \
 squid.py \
 tcpbuffers.py \
 yp.py \
+vaf-setup.py \
 workqueue.py
 
 extra_files = \
