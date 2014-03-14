@@ -353,23 +353,37 @@ AllowOverride all
 
         # Hook in rc.local to fix permissions that will be changed afterwards
         # by cloud-init
+        fix = [
+            '## Begin VAF fix ##',
+            'mkdir -p %s' % self.auth_keys_dir,
+            'ln -nfs /root/.ssh/authorized_keys %s/root' % self.auth_keys_dir,
+            'chmod 0755 %s' % self.auth_keys_dir,
+            '## End VAF fix ##'
+        ]
         try:
             f = open(self.rc_local, 'r')
             lines = f.readlines()
             f.close()
-            rechmod = r'\s*chmod\s+0755\s+.*%s' % re.escape( self.auth_keys_dir )
             f = open(self.rc_local, 'w')
+            in_fix = False
             for l in lines:
-                if not re.match(rechmod, l):
+                if l == fix[0]:
+                    in_fix = True
+                elif l == fix[-1]:
+                    in_fix = False
+                elif in_fix == False:
                     f.write(l)
-            if l[-1:] != '\n':
-                f.write('\n') # ensure last line ended with a newline
-            f.write('chmod 0755 \"%s\"\n' % self.auth_keys_dir)
+                    if l[-1:] != '\n':
+                        f.write('\n') # ensure last line ended with a newline
+            for l in fix:
+                f.write(l)
+                f.write('\n')
             f.close()
             os.chown(self.rc_local, 0, 0)
             os.chmod(self.rc_local, 0755)
         except (IOError, OSError) as e:
             print 'Problem writing permissions hook %s: %s' % (self.rc_local, e)
+            return False
 
         # sudoers
         try:
@@ -388,6 +402,7 @@ AllowOverride all
             f.close()
         except IOError as e:
             print 'Problem configuring %s: %s' % (self.sudoers, e)
+            return False
 
         # Restart affected services
         with open(os.devnull, 'w') as devnull:
