@@ -11,13 +11,29 @@ import os, stat
 import pwd, grp
 import base64
 import StringIO
+import pkgutil
 
 from amiconfig.errors import *
 from amiconfig.lib import util
 from amiconfig.plugin import AMIPlugin
 
 class AMIConfigPlugin(AMIPlugin):
+
+    # Name of this plugin
     name = 'elastiq-setup'
+
+    # boto configuration file
+    boto_cfg = '/etc/boto.cfg'
+
+    # boto final list of CAS
+    boto_cas_file = '/etc/boto_cacerts.txt'
+
+    # Sources of CAs: specify directories (will look for every *.pem file) or
+    # single files
+    boto_ssl_ca_src = [
+        '/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security/certificates'
+    ]
+
 
     def configure(self):
         """
@@ -49,6 +65,14 @@ class AMIConfigPlugin(AMIPlugin):
 
         Variables can be specified in any order, and they will be grouped in
         sections accordingly.
+
+        The special value:
+
+        cacerts_b64=<base64string>
+
+        is used to specify, encoded in base64, a list of PEM certificates for
+        the recognized SSL CAs. This is for boto and it will not end in the
+        elastiq configuration file.
         """
 
         cfgfile = '/etc/elastiq.conf'
@@ -67,7 +91,7 @@ class AMIConfigPlugin(AMIPlugin):
         cfgvar = {}
 
         for k,v in cfgraw.iteritems():
-            if k[0:2] == '__':
+            if k[0:2] == '__' or k == 'cacerts_b64':
                 continue
             s = k.split('_', 1)
             if len(s) != 2:
@@ -144,3 +168,63 @@ class AMIConfigPlugin(AMIPlugin):
         # Activate service and start
         os.system('/sbin/chkconfig elastiq on')
         os.system('/sbin/service elastiq restart')
+
+        # Configure CAs for boto
+        if self.config_boto_cas( cfgraw.get('cacerts_b64') ) == False:
+            return
+
+
+    def config_boto_cas(self, cacerts_b64):
+        """Configures CAs for boto.
+        """
+
+        cas = self.boto_ssl_ca_src
+        try:
+            cas.append( pkgutil.get_loader('boto.cacerts').filename + '/cacerts.txt' )
+        except NoneType:
+            pass
+
+        # Creates a flat list of files
+        ca_files = []
+        for ca in cas:
+            if os.path.isdir(ca):
+                for e in os.listdir(ca):
+                    e_full = ca + '/' + e
+                    if e.endswith('.pem') and os.path.isfile(e_full):
+                        ca_files.append(e_full)
+            else:
+                ca_files.append(ca)
+
+        # Merge files
+        try:
+            with open(self.boto_cas_file, 'w') as ca_out:
+
+                # CAs from files
+                for ca_in_fn in ca_files:
+                    if os.access(ca_in_fn, os.R_OK):
+                        ca_in = open(ca_in_fn, 'r')
+                        ca_out.write("\n## Source: %s\n" % ca_in_fn);
+                        ca_out.write( ca_in.read() )
+                        ca_out.write('\n')
+                        ca_in.close()
+                    else:
+                        print "Cannot read CA file %s" % ca_in_fn
+
+                # Additional CAs in base64 format
+                if cacerts_b64 is not None:
+                    try:
+                        ca_out.write("\n## Source: <base64>\n")
+                        ca_out.write( base64.b64decode(cacerts_b64) )
+                    except TypeError:
+                        print "Invalid base64 in additional CA certificates"
+
+        except IOError as e:
+            print "Error producing boto CA file %s: %s" % (self.boto_cas_file, e)
+
+        # boto configuration
+        try:
+            with open(self.boto_cfg, 'w') as f:
+                f.write('[Boto]\n');
+                f.write('ca_certificates_file = %s\n' % self.boto_cas_file)
+        except IOError as e:
+            print "Error producing boto global configuration file %s: %s" % (self.boto_cfg, e)
