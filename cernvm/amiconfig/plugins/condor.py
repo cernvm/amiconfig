@@ -219,7 +219,7 @@ class AMIConfigPlugin(AMIPlugin):
                     if new_line.startswith(key) and ( next_char == ' ' or next_char == '\t' or next_char == '=' ):
                        omit = True
                 if omit == False:
-                    fo.write( line )
+                    fo.write( line.rstrip() + '\n' )
             for key,val in condor_config_entries.iteritems():
                 if val is None:
                     break
