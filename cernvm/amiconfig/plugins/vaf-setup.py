@@ -344,6 +344,8 @@ AllowOverride all
             for l in lines:
                 if not re.match(reauth, l):
                     f.write(l)
+            if l[-1:] != '\n':
+                f.write('\n') # ensure last line ended with a newline
             f.write( 'AuthorizedKeysFile %s/%%u\n' % self.auth_keys_dir )
             f.close()
         except IOError as e:
@@ -360,6 +362,8 @@ AllowOverride all
             for l in lines:
                 if not re.match(rechmod, l):
                     f.write(l)
+            if l[-1:] != '\n':
+                f.write('\n') # ensure last line ended with a newline
             f.write('chmod 0755 \"%s\"\n' % self.auth_keys_dir)
             f.close()
             os.chown(self.rc_local, 0, 0)
@@ -377,6 +381,8 @@ AllowOverride all
             for l in lines:
                 if not re.match(rek, l):
                     f.write(l)
+            if l[-1:] != '\n':
+                f.write('\n') # ensure last line ended with a newline
             f.write('Defaults!%s/keys_keeper.sh !requiretty\n' % self.sshcertauth_dst)
             f.write('apache ALL=(ALL) NOPASSWD: %s/keys_keeper.sh\n' % self.sshcertauth_dst)
             f.close()
@@ -543,6 +549,8 @@ ldap_user_uid_number = CCID
             for l in lines:
                 if not re.match(recache, l):
                     f.write(l)
+            if l[-1:] != '\n':
+                f.write('\n') # ensure last line ended with a newline
             f.write('enable-cache passwd no\n')
             f.write('enable-cache group no\n')
             f.close()
