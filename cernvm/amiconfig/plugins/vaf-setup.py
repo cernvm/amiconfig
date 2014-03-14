@@ -381,7 +381,7 @@ AllowOverride all
             f.write('apache ALL=(ALL) NOPASSWD: %s/keys_keeper.sh\n' % self.sshcertauth_dst)
             f.close()
         except IOError as e:
-            print 'Problem configuring %s: %s' % (self.sshd_conf, e)
+            print 'Problem configuring %s: %s' % (self.sudoers, e)
 
         # Restart affected services
         with open(os.devnull, 'w') as devnull:
