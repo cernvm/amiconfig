@@ -12,6 +12,7 @@ import pwd, grp
 import base64
 import StringIO
 import pkgutil
+import subprocess
 
 from amiconfig.errors import *
 from amiconfig.lib import util
@@ -165,12 +166,16 @@ class AMIConfigPlugin(AMIPlugin):
         except IOError as e:
             print 'Cannot produce elastiq configuration %s: %s' % (cfgfile, e)
 
-        # Activate service and start
-        os.system('/sbin/chkconfig elastiq on')
-        os.system('/sbin/service elastiq restart')
-
         # Configure CAs for boto
         if self.config_boto_cas( cfgraw.get('cacerts_b64') ) == False:
+            return
+
+        # Activate service and start
+        try:
+            subprocess.call( '/sbin/chkconfig elastiq on'.split(' ') )
+            subprocess.call( '/sbin/service elastiq restart'.split(' ') )
+        except OSError as e:
+            print 'Error while enabling and starting elastiq: %s' % e
             return
 
 
@@ -220,6 +225,7 @@ class AMIConfigPlugin(AMIPlugin):
 
         except IOError as e:
             print "Error producing boto CA file %s: %s" % (self.boto_cas_file, e)
+            return False
 
         # boto configuration
         try:
@@ -228,3 +234,6 @@ class AMIConfigPlugin(AMIPlugin):
                 f.write('ca_certificates_file = %s\n' % self.boto_cas_file)
         except IOError as e:
             print "Error producing boto global configuration file %s: %s" % (self.boto_cfg, e)
+            return False
+
+        return True
