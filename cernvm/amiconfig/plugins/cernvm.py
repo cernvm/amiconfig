@@ -83,6 +83,8 @@ class AMIConfigPlugin(AMIPlugin):
         users = testalice:alice:12345test,testatlas:atlas:12345atlas
         # CernVM user shell </bin/bash|/bin/tcsh>
         shell = /bin/bash
+        # Automatically login CernVM user to GUI
+        auto_login = on
         # CVMFS HTTP proxy http://<host>:<port>;DIRECT
         proxy = DIRECT
         # list of ',' seperated services to start
@@ -209,6 +211,13 @@ class AMIConfigPlugin(AMIPlugin):
         self.writeConfigToFile(
             "/etc/cernvm/site.conf",
             'CERNVM_USER_SHELL',shell,"=")
+
+        autoLogin = 'off'
+        if 'auto_login' in cfg:
+            autoLogin = cfg['auto_login']
+        self.writeConfigToFile(
+            "/etc/cernvm/site.conf",
+            'CERNVM_AUTOLOGIN',autoLogin,"=")
 
         environment = ''
         vars = ''
