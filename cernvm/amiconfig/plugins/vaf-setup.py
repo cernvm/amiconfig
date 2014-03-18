@@ -74,7 +74,7 @@ class AMIConfigPlugin(AMIPlugin):
     sshd_conf = '/etc/ssh/sshd_config'
 
     # The sudoers file
-    sudoers = '/etc/sudoers'
+    sudoers = '/etc/sudoers.d/20_sshcertauth'
 
     # Configuration for sssd
     sssd_conf = '/etc/sssd/sssd.conf'
@@ -368,7 +368,7 @@ AllowOverride all
 
         except OSError as e:
             print 'Cannot fix keys permissions: %s' % e
-            return
+            return False
 
         # Hook in rc.local to fix permissions that will be changed afterwards
         # by cloud-init
@@ -410,16 +410,7 @@ AllowOverride all
 
         # sudoers
         try:
-            f = open(self.sudoers, 'r')
-            lines = f.readlines()
-            f.close()
-            rek = r'.*keys_keeper\.sh'
             f = open(self.sudoers, 'w')
-            for l in lines:
-                if not re.match(rek, l):
-                    f.write(l)
-            if l[-1:] != '\n':
-                f.write('\n') # ensure last line ended with a newline
             f.write('Defaults!%s/keys_keeper.sh !requiretty\n' % self.sshcertauth_dst)
             f.write('apache ALL=(ALL) NOPASSWD: %s/keys_keeper.sh\n' % self.sshcertauth_dst)
             f.close()
