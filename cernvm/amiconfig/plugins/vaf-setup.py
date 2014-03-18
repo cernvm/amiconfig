@@ -325,16 +325,7 @@ AllowOverride all
         except IOError as e:
             print 'Cannot write %s: %s' % (self.cron_expiry, e)
 
-        # Authorized keys path for SSH
-        try:
-            os.mkdir(self.auth_keys_dir)
-            # Preserve authorized keys for root
-            root_key = '/root/.ssh/authorized_keys'
-            if os.path.isfile(root_key):
-                os.symlink(root_key, self.auth_keys_dir + '/root')
-        except OSError:
-            pass
-
+        # Correct path to authorized keys in sshd config
         try:
             f = open(self.sshd_conf, 'r')
             lines = f.readlines()
@@ -351,15 +342,47 @@ AllowOverride all
         except IOError as e:
             print 'Problem configuring %s: %s' % (self.sshd_conf, e)
 
+        # Authorized keys creation, permissions, etc.
+
+        # user:orig_key_path for keys to preserve to the destination
+        ssh_keys = {
+            'root': '/root/.ssh/authorized_keys',
+            'cloud-user': '/home/cloud-user/.ssh/authorized_keys'
+        }
+        try:
+
+            # Create directory
+            if not os.path.isdir(self.auth_keys_dir):
+                os.mkdir(self.auth_keys_dir)
+            os.chown(self.auth_keys_dir, 0, 0)
+            os.chmod(self.auth_keys_dir, 0755)
+
+            # Move keys of root and cloud-user if they exist
+            for user,path in ssh_keys.iteritems():
+                dest = '%s/%s' % (self.auth_keys_dir, user)
+                if os.path.isfile(path):
+                    os.rename(path, dest)
+                if os.path.isfile(dest):
+                    os.chown(dest, 0, 0)
+                    os.chmod(dest, 0644)
+
+        except OSError as e:
+            print 'Cannot fix keys permissions: %s' % e
+            return
+
         # Hook in rc.local to fix permissions that will be changed afterwards
         # by cloud-init
         fix = [
             '## Begin VAF fix ##',
-            'mkdir -p %s' % self.auth_keys_dir,
-            'ln -nfs /root/.ssh/authorized_keys %s/root' % self.auth_keys_dir,
-            'chmod 0755 %s' % self.auth_keys_dir,
-            '## End VAF fix ##'
+            'mkdir -p %s' % self.auth_keys_dir
         ]
+        for user,path in ssh_keys.iteritems():
+            fix.append( 'mv %s %s/%s 2> /dev/null' % (path, self.auth_keys_dir, user) )
+        fix.extend([
+            'chmod -R u=rwX,g=rX,o=rX %s' % self.auth_keys_dir,
+            'chown -R root:root %s' % self.auth_keys_dir,
+            '## End VAF fix ##'
+        ])
         try:
             f = open(self.rc_local, 'r')
             lines = f.readlines()
