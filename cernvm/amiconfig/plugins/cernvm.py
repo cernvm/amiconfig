@@ -10,6 +10,7 @@ import base64
 import pwd
 import random
 import re
+import shutil
 
 from subprocess import call
 
@@ -264,6 +265,15 @@ class AMIConfigPlugin(AMIPlugin):
         certUserField = 'x509-user'
         if  certUserField in cfg:
             x509User = cfg[certUserField]
+
+        certFileField = 'x509-cert-file'
+        if certFileField in cfg and x509User is not None:
+            pw = pwd.getpwnam(x509User)
+            x509CertFile = '/tmp/x509up_u' + str(pw.pw_uid)
+            eosx509CertFile = x509CertFile
+            shutil.copy2(cfg[certFileField], x509CertFile)
+            os.chmod(x509CertFile,stat.S_IREAD|stat.S_IWRITE)
+            os.chown(x509CertFile,pw.pw_uid,pw.pw_gid)
 
         certField = 'x509-cert'
         if  certField in cfg and x509User is not None:
