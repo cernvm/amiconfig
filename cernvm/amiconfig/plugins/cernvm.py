@@ -10,6 +10,7 @@ import base64
 import pwd
 import random
 import re
+import shutil
 
 from subprocess import call
 
@@ -83,6 +84,8 @@ class AMIConfigPlugin(AMIPlugin):
         users = testalice:alice:12345test,testatlas:atlas:12345atlas
         # CernVM user shell </bin/bash|/bin/tcsh>
         shell = /bin/bash
+        # Automatically login CernVM user to GUI
+        auto_login = on
         # CVMFS HTTP proxy http://<host>:<port>;DIRECT
         proxy = DIRECT
         # list of ',' seperated services to start
@@ -210,6 +213,13 @@ class AMIConfigPlugin(AMIPlugin):
             "/etc/cernvm/site.conf",
             'CERNVM_USER_SHELL',shell,"=")
 
+        autoLogin = 'off'
+        if 'auto_login' in cfg:
+            autoLogin = cfg['auto_login']
+        self.writeConfigToFile(
+            "/etc/cernvm/site.conf",
+            'CERNVM_AUTOLOGIN',autoLogin,"=")
+
         environment = ''
         vars = ''
         if 'environment' in cfg:
@@ -255,6 +265,15 @@ class AMIConfigPlugin(AMIPlugin):
         certUserField = 'x509-user'
         if  certUserField in cfg:
             x509User = cfg[certUserField]
+
+        certFileField = 'x509-cert-file'
+        if certFileField in cfg and x509User is not None:
+            pw = pwd.getpwnam(x509User)
+            x509CertFile = '/tmp/x509up_u' + str(pw.pw_uid)
+            eosx509CertFile = x509CertFile
+            shutil.copy2(cfg[certFileField], x509CertFile)
+            os.chmod(x509CertFile,stat.S_IREAD|stat.S_IWRITE)
+            os.chown(x509CertFile,pw.pw_uid,pw.pw_gid)
 
         certField = 'x509-cert'
         if  certField in cfg and x509User is not None:
