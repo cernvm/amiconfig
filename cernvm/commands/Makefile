@@ -14,23 +14,30 @@
 
 TOPDIR=..
 
+bin_files = \
+	amiconfig-mime
+
 sbin_files = \
 	amiconfig-helper
 
 extra_dist = \
 	Makefile \
 
-dist_files = $(sbin_files) $(extra_dist)
+dist_files = $(bin_files) $(sbin_files) $(extra_dist)
 
 all: default-all
 
 install-mkdirs:
 	mkdir -p $(DESTDIR)$(sbindir)
+	mkdir -p $(DESTDIR)$(bindir)
 
 install: install-mkdirs
 	for f in $(sbin_files); do \
 		install -m755 $$f $(DESTDIR)$(sbindir)/$$f; \
 	done
+	for f in $(bin_files); do \
+                install -m755 $$f $(DESTDIR)$(bindir)/$$f; \
+        done
 
 dist: default-dist
 
