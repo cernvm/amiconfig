@@ -482,6 +482,8 @@ Main() {
   case "$MODE" in
     user)
       RunUserDataScript before
+      # Hack: read meta-data from HTTP, user-data locally to include extra user data
+      export AMICONFIG_EC2_USER_DATA_URL="file:$(dirname ${AMICONFIG_LOCAL_USER_DATA})"
       $AMICONFIG 2>&1 #| $PIPELOGGER
       RunUserDataScript after
       mkdir -p `dirname "$AMI_DONE_USER"`
