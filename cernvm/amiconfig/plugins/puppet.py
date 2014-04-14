@@ -56,6 +56,7 @@ class AMIConfigPlugin(AMIPlugin):
         puppetmaster_extra_opts=--no-ca
         """
 
+        cfg = self.ud.getSection('puppet')
         output = []
         if 'puppet_server' in cfg:
             config_file = '/etc/sysconfig/puppet'
@@ -80,6 +81,7 @@ class AMIConfigPlugin(AMIPlugin):
         if len(output) :
             f = open(config_file,'w')
             f.write('\n'.join(output))
+            f.write('\n')
             f.close()
 
             
