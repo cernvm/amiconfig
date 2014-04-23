@@ -83,5 +83,6 @@ class AMIConfigPlugin(AMIPlugin):
             f.write('\n'.join(output))
             f.write('\n')
             f.close()
+            os.system("/sbin/chkconfig puppet on")
+            os.system("/sbin/service puppet start")
 
-            
