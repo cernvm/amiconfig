@@ -220,6 +220,13 @@ class AMIConfigPlugin(AMIPlugin):
             "/etc/cernvm/site.conf",
             'CERNVM_AUTOLOGIN',autoLogin,"=")
 
+        if 'desktop_icons' in cfg:
+            desktopIcons = cfg['desktop_icons']
+            self.writeConfigToFile(
+              "/etc/cernvm/site.conf",
+              'CERNVM_DESKTOP_ICONS', desktopIcons, "=")
+            util.call(['/etc/cernvm/config','-y'])
+
         environment = ''
         vars = ''
         if 'environment' in cfg:
