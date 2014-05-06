@@ -45,6 +45,17 @@ class InstanceData:
         return self.open(path).read()
 
     def getUserData(self):
+
+        # Read user-data from cache if possible
+        user_data_cache = os.getenv("AMICONFIG_LOCAL_USER_DATA")
+        if user_data_cache is not None and user_data_cache[0] == '/':
+            try:
+                with open(user_data_cache) as f:
+                    return f.read()
+            except IOError, e:
+                pass
+
+        # Fall back to standard read
         return self.read('user-data')
 
     def getAMIId(self):
