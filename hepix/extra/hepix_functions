@@ -83,21 +83,25 @@ getResourcesFromCD() {
     context_disk_found=""
     mount_dir=$(mktemp -d)
 
-    for dev in /dev/sr{0,1} /dev/{xv,v,h,s}d{c,d,b}; do
+    for dev in /dev/sr{0,1} /dev/{xv,v,h,s}d{c,d,b}{,1}; do
         if [ -e "${dev}" ] ; then
             rdisk=$dev
-            logger -t $0 "Attempting to mount contextualization image from $rdisk"
-            mount -t iso9660 ${rdisk} $mount_dir > /dev/null 2>&1
-            if [ 0 -eq $? ]; then
-                if [ -e "$mount_dir/prolog.sh" -o  -e "$mount_dir/context.sh" ]; then
-                  cp -r $mount_dir/* $CONTEXT_DIR/
-                  chmod 700 $CONTEXT_DIR
-                  context_disk_found="indeed"
-                  break
-                else
-                  umount $mount_dir >/dev/null 2>&1
-                fi
-            fi
+            fstype=$(blkid $rdisk | awk '{print $4}' | sed s/TYPE=// | tr -d \")
+            if [ "x$fstype" = "xiso9660" -o "x$fstype" = "xvfat" ]; then
+              logger -t $0 "Attempting to mount contextualization image from $rdisk"
+            
+              mount -o ro ${rdisk} $mount_dir > /dev/null 2>&1
+              if [ 0 -eq $? ]; then
+                  if [ -e "$mount_dir/prolog.sh" -o  -e "$mount_dir/context.sh" ]; then
+                    cp -r $mount_dir/* $CONTEXT_DIR/
+                    chmod 700 $CONTEXT_DIR
+                    context_disk_found="indeed"
+                    break
+                  else
+                    umount $mount_dir >/dev/null 2>&1
+                  fi
+              fi
+            fi  
         fi
     done
     if [ -z "${rdisk}" ]; then
