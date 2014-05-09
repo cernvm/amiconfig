@@ -86,7 +86,11 @@ getResourcesFromCD() {
     for dev in /dev/sr{0,1} /dev/{xv,v,h,s}d{c,d,b}{,1}; do
         if [ -e "${dev}" ] ; then
             rdisk=$dev
-            fstype=$(blkid $rdisk | awk '{print $4}' | sed s/TYPE=// | tr -d \")
+
+            # Extract filesystem type of device
+            fstype=$( blkid $rdisk | grep -o -E 'TYPE="[0-9a-zA-Z]+' )
+            fstype=${fstype:6}
+
             if [ "x$fstype" = "xiso9660" -o "x$fstype" = "xvfat" ]; then
               logger -t $0 "Attempting to mount contextualization image from $rdisk"
             
