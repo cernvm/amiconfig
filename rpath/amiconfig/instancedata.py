@@ -42,23 +42,19 @@ class InstanceData:
         return results
 
     def read(self, path):
-        ec2_user_data_url = os.getenv("AMICONFIG_EC2_USER_DATA_URL")
-        if ec2_user_data_url is not None:
-            try:
-                results = urllib.urlopen('%s/user-data' % (ec2_user_data_url))
-            except Exception, e:
-                raise EC2DataRetrievalError, '[Errno %s] %s' % (e.errno, e.strerror)
-            if results.headers.gettype() == 'text/html':
-                # Eucalyptus returns text/html and no Server: header
-                # We want to protect ourselves from HTTP servers returning real
-                # HTML, so let's hope at least they're conformant and return a
-                # Server: header
-                if 'server' in results.headers:
-                    raise EC2DataRetrievalError, '%s' % results.read()
-            return results.read()
         return self.open(path).read()
 
     def getUserData(self):
+
+        # Read user-data from cache if possible
+        user_data_cache = os.getenv("AMICONFIG_LOCAL_USER_DATA")
+        if user_data_cache is not None and user_data_cache[0] == '/':
+            try:
+                return open(user_data_cache).read()
+            except IOError, e:
+                pass
+
+        # Fall back to standard read
         return self.read('user-data')
 
     def getAMIId(self):

@@ -4,6 +4,12 @@ AMICONFIG="/usr/sbin/amiconfig"
 AMILOCK="/var/lock/subsys/amiconfig"
 AMISETUP="/etc/sysconfig/amiconfig"
 
+# Where to look for injected extra user-data
+AMI_EXTRA_USER_DATA="/cernvm/extra-user-data"
+
+# A lock file to signal appended user-data
+AMI_DONE_EXTRA_APPENDED='/var/lib/amiconfig/extra-appended.done'
+
 # Maximum number of retries when attempting to retrieve user-data
 AMI_DOWNLOAD_RETRIES=2
 
@@ -28,6 +34,7 @@ fi
 RetrieveUserData() {
 
   if [ "$AMICONFIG_CONTEXT_URL" != '' ] ; then
+
     # If context URL is found, it's from the environment. We must fill manually
     # the "local copy", where applicable
     $LOGGER "Won't check for new URLs: found from environment: $AMICONFIG_CONTEXT_URL"
@@ -65,16 +72,12 @@ RetrieveUserData() {
     fi
 
   else
+
     RetrieveUserDataCvmOnline || RetrieveUserDataEC2 || RetrieveUserDataCloudStack || RetrieveUserDataGCE
-    if [ $? == 1 ] ; then
-      if [ ! -f /cernvm/extra-user-data ]; then
-        $LOGGER "No user-data can be retrieved from any location"
-        return 1
-      else
-        cat /cernvm/extra-user-data > "$AMICONFIG_LOCAL_USER_DATA"
-        chmod 600 "$AMICONFIG_LOCAL_USER_DATA"
-      fi
+    if [ $? != 0 ] ; then
+      $LOGGER "No standard user-data can be retrieved from any standard source: we are going to check for extra injected user data"
     fi
+
   fi
 
   # At this point, user-data is available locally. Let's uncompress it if needed
@@ -91,11 +94,64 @@ RetrieveUserData() {
     fi
   fi
 
-  if [ -f /cernvm/extra-user-data ]; then
-    cat /cernvm/extra-user-data >> "$AMICONFIG_LOCAL_USER_DATA"
+  # Now we retrieve the extra user data (which is never compressed) and append it, if it exists
+  if [ ! -e "$AMI_DONE_EXTRA_APPENDED" ] ; then
+    RetrieveUserDataInjected && touch "$AMI_DONE_EXTRA_APPENDED"
+  else
+    $LOGGER "Extra injected user-data already appended, skipping"
+  fi
+
+  # Hard failure only if no user-data can be found either from standard location and extra injected path
+  if [ ! -r "$AMICONFIG_LOCAL_USER_DATA" ] ; then
+    return 1
   fi
 
   return 0
+
+}
+
+# Retrieve injected user data. Injected user-data does not exclude other
+# user-data sources, but it is always appended to existing user-data. In some
+# cases the injected extra user-data can be the only source: this case is
+# appropriately dealt with. Returns 1 on failure, 0 if found
+RetrieveUserDataInjected() {
+
+  # Fall back to this path if no existing user-data is there already
+  LOCAL_USER_DATA='/var/lib/amiconfig/2007-12-15'
+
+  if [ -r "$AMI_EXTRA_USER_DATA" ] ; then
+
+    $LOGGER "Extra injected configuration: additional user-data found at $AMI_EXTRA_USER_DATA"
+
+    if [ "$AMICONFIG_CONTEXT_URL" == '' ] ; then
+
+      $LOGGER "Extra injected configuration: this is the only user-data source available"
+
+      # This is the only user-data! Set variables properly and save permanently
+      mkdir -p "$LOCAL_USER_DATA"
+      export AMICONFIG_CONTEXT_URL="file:$LOCAL_USER_DATA"
+      export AMICONFIG_LOCAL_USER_DATA="${LOCAL_USER_DATA}/user-data"
+      echo "export AMICONFIG_CONTEXT_URL=$AMICONFIG_CONTEXT_URL" > $AMISETUP
+
+      # Add a newline at the end (might be missing)
+      echo '' > "$AMICONFIG_LOCAL_USER_DATA"
+
+    else
+
+      $LOGGER "Extra injected configuration: appending configuration to current user-data at $AMICONFIG_LOCAL_USER_DATA"
+
+    fi
+
+    # Append extra injected user-data
+    cat "$AMI_EXTRA_USER_DATA" >> "$AMICONFIG_LOCAL_USER_DATA"
+    chmod 0600 "$AMICONFIG_LOCAL_USER_DATA"
+
+    return 0  # success (found)
+
+  fi
+
+  $LOGGER "Extra injected configuration: no injected user-data found at $AMI_EXTRA_USER_DATA"
+  return 1  # failure (not found)
 
 }
 
@@ -482,8 +538,6 @@ Main() {
   case "$MODE" in
     user)
       RunUserDataScript before
-      # Hack: read meta-data from HTTP, user-data locally to include extra user data
-      export AMICONFIG_EC2_USER_DATA_URL="file:$(dirname ${AMICONFIG_LOCAL_USER_DATA})"
       $AMICONFIG 2>&1 #| $PIPELOGGER
       RunUserDataScript after
       mkdir -p `dirname "$AMI_DONE_USER"`
