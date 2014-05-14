@@ -88,7 +88,7 @@ getResourcesFromCD() {
             rdisk=$dev
 
             # Extract filesystem type of device
-            fstype=$( blkid $rdisk | grep -o -E 'TYPE="[0-9a-zA-Z]+' )
+            fstype=$( blkid $rdisk | sed -e 's/SEC_TYPE//' | grep -o -E 'TYPE="[0-9a-zA-Z]+' )
             fstype=${fstype:6}
 
             if [ "x$fstype" = "xiso9660" -o "x$fstype" = "xvfat" ]; then
