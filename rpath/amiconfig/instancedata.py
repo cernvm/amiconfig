@@ -49,10 +49,15 @@ class InstanceData:
         # Read user-data from cache if possible
         user_data_cache = os.getenv("AMICONFIG_LOCAL_USER_DATA")
         if user_data_cache is not None and user_data_cache[0] == '/':
+            f = None
             try:
-                return open(user_data_cache).read()
+                f = open(user_data_cache)
+                return f.read()
             except IOError, e:
                 pass
+            finally:
+                if f is not None:
+                    f.close()
 
         # Fall back to standard read
         return self.read('user-data')
