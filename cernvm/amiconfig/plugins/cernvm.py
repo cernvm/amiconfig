@@ -243,6 +243,7 @@ class AMIConfigPlugin(AMIPlugin):
         users = ''
         first = 1
         eosUser = None
+        x509User = None
         if 'users' in cfg:
             users = cfg['users']
             for entry in users.split(','):
@@ -270,8 +271,12 @@ class AMIConfigPlugin(AMIPlugin):
                              '%s' % (group)]) 
 
         certUserField = 'x509-user'
-        if  certUserField in cfg:
+        if certUserField in cfg:
             x509User = cfg[certUserField]
+
+        if x509User is None:
+            # Fallback to root
+            x509User = 'root'
 
         certFileField = 'x509-cert-file'
         if certFileField in cfg and x509User is not None:
