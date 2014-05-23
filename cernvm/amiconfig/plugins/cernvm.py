@@ -80,6 +80,9 @@ class AMIConfigPlugin(AMIPlugin):
         group_profile = group-<org>[-desktop]
         # list of ',' seperated repositories
         repositories = alice,atlas,grid
+        # extra repositories, comma-separated; each field has:
+        # name|server|<base64_encoded_pubkey>
+        extra_repositories = name|server|<base64_encoded_pubkey>,name2|server2|<base64_encoded_pubkey2>
         # CernVM user name:group:password
         users = testalice:alice:12345test,testatlas:atlas:12345atlas
         # CernVM user shell </bin/bash|/bin/tcsh>
@@ -148,6 +151,42 @@ class AMIConfigPlugin(AMIPlugin):
             self.writeConfigToFile(
                 "/etc/cvmfs/site.conf",
                 'CVMFS_REPOSITORIES',repositories,"=")
+
+        extra_repositories = cfg.get('extra_repositories', None)
+        if extra_repositories is not None:
+            for entry in extra_repositories.split(','):
+                parsed_entry = entry.split('|')
+                if len(parsed_entry) == 3:
+                    r_name, r_serv, r_key_b64 = parsed_entry
+                    try:
+                        r_key = base64.b64decode(r_key_b64)
+                    except Exception:
+                        # malformed b64
+                        continue
+
+                    # Write configuration
+                    f = None
+                    try:
+                        f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
+                        f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
+                        f.write( 'CVMFS_HTTP_PROXY=DIRECT\n' )
+                    except IOError, e:
+                        print "Cannot write configuration for CVMFS repo %s" % r_name
+                        pass
+                    finally:
+                        if f is not None: f.close()
+
+                    # Write key
+                    f = None
+                    try:
+                        f = open('/etc/cvmfs/keys/%s.pub'%r_name, 'w')
+                        f.write(r_key)
+                        f.write('\n')
+                    except IOError, e:
+                        print "Cannot write pubkey for CVMFS repo %s" % r_name
+                        pass
+                    finally:
+                        if f is not None: f.close()
 
         screenRes = ''
         if 'screenres' in cfg:
