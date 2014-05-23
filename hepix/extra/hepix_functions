@@ -3,8 +3,8 @@ AMICONFIG_CONTEXT_DIR=/var/lib/amiconfig
 
 setupContext () {
     VERSION="2007-12-15"
-    # get user data from CD rather than network for OpenNebula 
     if [ -e $CONTEXT_DIR/context.sh ]; then
+        # OpenNebula
         . $CONTEXT_DIR/context.sh
         mkdir -p $AMICONFIG_CONTEXT_DIR/${VERSION}
         if [ "x$EC2_USER_DATA" != "x" ] ; then
@@ -26,6 +26,41 @@ setupContext () {
         echo "export AMICONFIG_CONTEXT_URL=file:$AMICONFIG_CONTEXT_DIR/${VERSION}" >> /etc/sysconfig/amiconfig
         . /etc/sysconfig/amiconfig
         chmod -R 700 $AMICONFIG_CONTEXT_DIR
+    elif [ -e "$CONTEXT_DIR/user-data" -a -e "$CONTEXT_DIR/meta-data.json" ]; then
+
+        # OpenStack ConfigDrive
+        rm -rf "${AMICONFIG_CONTEXT_DIR}/${VERSION}"
+        mkdir -p "${AMICONFIG_CONTEXT_DIR}/${VERSION}"
+        cp $CONTEXT_DIR/user-data "${AMICONFIG_CONTEXT_DIR}/${VERSION}/user-data"
+
+        # JSON to directory structure (easier to parse in Python)
+        Py='/tmp/context-json-to-dir.py'
+        cat > "$Py" <<_EoF_
+import json, os
+def recursive_explore(p, d):
+    for k,v in d.iteritems():
+        if isinstance(v, dict):
+            recursive_explore(p+k+'/', v)
+        elif v is not None:
+            if not os.path.isdir(p):
+                os.makedirs(p)
+            g = open(p+k, 'w')
+            g.write( str(v) )
+            g.close()
+            print "%s%s = %s" % (p, k, v)
+f = open("$CONTEXT_DIR/meta-data.json")
+d = json.loads(f.read())
+recursive_explore('${AMICONFIG_CONTEXT_DIR}/${VERSION}/meta-data/', d)
+_EoF_
+        python "$Py" > /dev/null 2> /dev/null
+        rm -f "$Py"
+
+        # Tell amiconfig.sh where is all the stuff
+        echo "export AMICONFIG_CONTEXT_URL=file:${AMICONFIG_CONTEXT_DIR}/${VERSION}" > /etc/sysconfig/amiconfig
+
+        # Enforce strict permissions
+        chmod u=rwX,g=,o= -R $CONTEXT_DIR
+
     fi
 }
 
@@ -77,7 +112,6 @@ runContextualizationScript () {
     fi          
 }
 
-
 getResourcesFromCD() {
     rdisk=""
     context_disk_found=""
@@ -97,8 +131,16 @@ getResourcesFromCD() {
               mount -o ro ${rdisk} $mount_dir > /dev/null 2>&1
               if [ 0 -eq $? ]; then
                   if [ -e "$mount_dir/prolog.sh" -o  -e "$mount_dir/context.sh" ]; then
+                    # OpenNebula or Hepix format
                     cp -r $mount_dir/* $CONTEXT_DIR/
                     chmod 700 $CONTEXT_DIR
+                    context_disk_found="indeed"
+                    break
+                  elif [ -e "$mount_dir/ec2/latest/user-data" -a -e "$mount_dir/ec2/latest/meta-data.json" ]; then
+                    # OpenStack ConfigDrive
+                    mkdir -p $CONTEXT_DIR
+                    rsync -a --delete "$mount_dir/ec2/latest/" "${CONTEXT_DIR}/"
+                    chmod u=rwX,g=,o= -R $CONTEXT_DIR
                     context_disk_found="indeed"
                     break
                   else
