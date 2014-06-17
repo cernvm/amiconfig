@@ -51,10 +51,11 @@ class InstanceData:
         if user_data_cache is not None and user_data_cache[0] == '/':
             f = None
             try:
-                f = open(user_data_cache)
-                return f.read()
-            except IOError, e:
-                pass
+                try:
+                    f = open(user_data_cache)
+                    return f.read()
+                except IOError, e:
+                    pass
             finally:
                 if f is not None:
                     f.close()
