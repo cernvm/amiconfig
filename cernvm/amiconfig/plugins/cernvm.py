@@ -167,24 +167,26 @@ class AMIConfigPlugin(AMIPlugin):
                     # Write configuration
                     f = None
                     try:
-                        f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
-                        f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
-                        f.write( 'CVMFS_HTTP_PROXY=DIRECT\n' )
-                    except IOError, e:
-                        print "Cannot write configuration for CVMFS repo %s" % r_name
-                        pass
+                        try:
+                            f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
+                            f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
+                            f.write( 'CVMFS_HTTP_PROXY=DIRECT\n' )
+                        except IOError, e:
+                            print "Cannot write configuration for CVMFS repo %s" % r_name
+                            pass
                     finally:
                         if f is not None: f.close()
 
                     # Write key
                     f = None
                     try:
-                        f = open('/etc/cvmfs/keys/%s.pub'%r_name, 'w')
-                        f.write(r_key)
-                        f.write('\n')
-                    except IOError, e:
-                        print "Cannot write pubkey for CVMFS repo %s" % r_name
-                        pass
+                        try:
+                            f = open('/etc/cvmfs/keys/%s.pub'%r_name, 'w')
+                            f.write(r_key)
+                            f.write('\n')
+                        except IOError, e:
+                            print "Cannot write pubkey for CVMFS repo %s" % r_name
+                            pass
                     finally:
                         if f is not None: f.close()
 
