@@ -170,7 +170,7 @@ class AMIConfigPlugin(AMIPlugin):
                         try:
                             f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
                             f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
-                            f.write( 'CVMFS_HTTP_PROXY=DIRECT\n' )
+                            f.write( 'CVMFS_PUBLIC_KEY=/etc/cvmfs/keys/%s.pub\n' % r_name )
                         except IOError, e:
                             print "Cannot write configuration for CVMFS repo %s" % r_name
                             pass
