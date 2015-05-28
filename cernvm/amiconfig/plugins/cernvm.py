@@ -268,6 +268,9 @@ class AMIConfigPlugin(AMIPlugin):
             self.writeConfigToFile(
               "/etc/cernvm/site.conf",
               'CERNVM_SWAP_SIZE', swapSize, "=")
+            call(['/etc/cernvm/config',
+                             '-t',
+                             '%s' % (swapSize)])
 
         if 'desktop_icons' in cfg:
             desktopIcons = cfg['desktop_icons']
