@@ -61,6 +61,12 @@ _EoF_
         # Enforce strict permissions
         chmod u=rwX,g=,o= -R $CONTEXT_DIR
 
+    elif [ -e "$CONTEXT_DIR/user-data.azure" ]; then
+        # Microsoft Azure
+        rm -rf "${AMICONFIG_CONTEXT_DIR}/${VERSION}"
+        mkdir -p "${AMICONFIG_CONTEXT_DIR}/${VERSION}"
+        cp $CONTEXT_DIR/user-data.azure "${AMICONFIG_CONTEXT_DIR}/${VERSION}/user-data"
+        echo "export AMICONFIG_CONTEXT_URL=file:${AMICONFIG_CONTEXT_DIR}/${VERSION}" > /etc/sysconfig/amiconfig
     fi
 }
 
@@ -125,7 +131,7 @@ getResourcesFromCD() {
             fstype=$( blkid $rdisk | grep -o -E ' TYPE="[0-9a-zA-Z]+' )
             fstype=${fstype:7}
 
-            if [ "x$fstype" = "xiso9660" -o "x$fstype" = "xvfat" ]; then
+            if [ "x$fstype" = "xiso9660" -o "x$fstype" = "xvfat" -o "x$fstype" = "xudf" ]; then
               logger -t $0 "Attempting to mount contextualization image from $rdisk"
             
               mount -o ro ${rdisk} $mount_dir > /dev/null 2>&1
@@ -140,6 +146,13 @@ getResourcesFromCD() {
                     # OpenStack ConfigDrive
                     mkdir -p $CONTEXT_DIR
                     rsync -a --delete "$mount_dir/ec2/latest/" "${CONTEXT_DIR}/"
+                    chmod u=rwX,g=,o= -R $CONTEXT_DIR
+                    context_disk_found="indeed"
+                    break
+                  elif [ -f "$mount_dir/E6DA6616-8EC4-48E0-BE93-58CE6ACE3CFB.tag" -a -f "$mount_dir/CustomData.bin" ]; then
+                    # Microsoft Azure
+                    mkdir -p $CONTEXT_DIR
+                    cp "$mount_dir/CustomData.bin" "$CONTEXT_DIR/user-data.azure"
                     chmod u=rwX,g=,o= -R $CONTEXT_DIR
                     context_disk_found="indeed"
                     break
