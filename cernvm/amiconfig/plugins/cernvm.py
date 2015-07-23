@@ -105,6 +105,8 @@ class AMIConfigPlugin(AMIPlugin):
         keyboard = us
         # GRID UI version
         gridUiVersion = default
+        # Either fixed size (1g, 2g, ...) or auto, meaning 2g/core.  Default is no swap.
+        swap_size = off
         """
 
         cfg = self.ud.getSection('cernvm')
@@ -167,24 +169,26 @@ class AMIConfigPlugin(AMIPlugin):
                     # Write configuration
                     f = None
                     try:
-                        f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
-                        f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
-                        f.write( 'CVMFS_HTTP_PROXY=DIRECT\n' )
-                    except IOError, e:
-                        print "Cannot write configuration for CVMFS repo %s" % r_name
-                        pass
+                        try:
+                            f = open('/etc/cvmfs/config.d/%s.conf'%r_name, 'w')
+                            f.write( 'CVMFS_SERVER_URL=http://%s/cvmfs/%s\n' % (r_serv, r_name) )
+                            f.write( 'CVMFS_PUBLIC_KEY=/etc/cvmfs/keys/%s.pub\n' % r_name )
+                        except IOError, e:
+                            print "Cannot write configuration for CVMFS repo %s" % r_name
+                            pass
                     finally:
                         if f is not None: f.close()
 
                     # Write key
                     f = None
                     try:
-                        f = open('/etc/cvmfs/keys/%s.pub'%r_name, 'w')
-                        f.write(r_key)
-                        f.write('\n')
-                    except IOError, e:
-                        print "Cannot write pubkey for CVMFS repo %s" % r_name
-                        pass
+                        try:
+                            f = open('/etc/cvmfs/keys/%s.pub'%r_name, 'w')
+                            f.write(r_key)
+                            f.write('\n')
+                        except IOError, e:
+                            print "Cannot write pubkey for CVMFS repo %s" % r_name
+                            pass
                     finally:
                         if f is not None: f.close()
 
@@ -258,6 +262,15 @@ class AMIConfigPlugin(AMIPlugin):
         self.writeConfigToFile(
             "/etc/cernvm/site.conf",
             'CERNVM_AUTOLOGIN',autoLogin,"=")
+
+        if 'swap_size' in cfg:
+            swapSize = cfg['swap_size']
+            self.writeConfigToFile(
+              "/etc/cernvm/site.conf",
+              'CERNVM_SWAP_SIZE', swapSize, "=")
+            call(['/etc/cernvm/config',
+                             '-t',
+                             '%s' % (swapSize)])
 
         if 'desktop_icons' in cfg:
             desktopIcons = cfg['desktop_icons']
