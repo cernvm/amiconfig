@@ -1,0 +1,17 @@
+[Unit]
+Description=Fetch key-based contextualization
+After=local-fs.target network-online.target
+Requires=network-online.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/cernvm-online.sh site
+RemainAfterExit=yes
+TimeoutSec=0
+
+# Output needs to appear in instance console output
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
