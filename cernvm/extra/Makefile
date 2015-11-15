@@ -15,13 +15,11 @@ TOPDIR = ..
 
 extra_files = Makefile
 
-dist_files = cernvm-online.service $(extra_files)
+dist_files = $(extra_files)
 
 all:
 
 install:
-	mkdir -p $(DESTDIR)/usr/lib/systemd/system
-	install -m 644 cernvm-online.service $(DESTDIR)/usr/lib/systemd/system/cernvm-online.service
 
 dist : $(dist_files) default-dist
 
