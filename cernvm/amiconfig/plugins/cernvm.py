@@ -393,6 +393,4 @@ class AMIConfigPlugin(AMIPlugin):
 
         if  edition == 'Desktop':
             util.call(['/etc/cernvm/config','-x']) 
-            util.call(['/sbin/telinit','5'])
 
-        util.call(['/sbin/service cernvm start'])
