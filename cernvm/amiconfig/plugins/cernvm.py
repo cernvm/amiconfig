@@ -139,6 +139,7 @@ class AMIConfigPlugin(AMIPlugin):
                 "/etc/cernvm/site.conf",
                 'CERNVM_CONTEXTUALIZATION_COMMAND',
                 contextualization_cmd,"=")
+            util.call(['/etc/cernvm/service.d/cernvm-context-postscripts'])
     
         organisations = ''
         if 'organisations' in cfg:
@@ -248,6 +249,7 @@ class AMIConfigPlugin(AMIPlugin):
             self.writeConfigToFile(
                 "/etc/cernvm/site.conf",
                 'CERNVM_SERVICES',services,"=")
+            util.call(['/etc/cernvm/service.d/cernvm-context-postscripts'])
 
         shell = '/bin/bash'
         if 'shell' in cfg:
