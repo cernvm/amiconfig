@@ -139,7 +139,7 @@ class AMIConfigPlugin(AMIPlugin):
                 "/etc/cernvm/site.conf",
                 'CERNVM_CONTEXTUALIZATION_COMMAND',
                 contextualization_cmd,"=")
-            util.call(['/etc/cernvm/service.d/cernvm-context-postscripts'])
+            util.call(['/etc/cernvm/service.d/cernvm-context-postscripts', 'force'])
     
         organisations = ''
         if 'organisations' in cfg:
