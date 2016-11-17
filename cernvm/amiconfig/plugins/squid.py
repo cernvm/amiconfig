@@ -64,6 +64,6 @@ class AMIConfigPlugin(AMIPlugin):
                 f.write('ulimit -n 10000\n')
                 f.close()
 	
-	os.system("/sbin/chkconfig squid on")
 	os.system("squid -z")
-	os.system("/sbin/service squid start")
+        os.system("systemctl enable squid")
+	os.system("systemctl start squid")
