@@ -370,7 +370,7 @@ class AMIConfigPlugin(AMIPlugin):
             eosx509CertFile = '/tmp/x509up_u' + str(pw.pw_uid) + '.eos' 
             file(eosx509CertFile, "w").write(eosx509Cert)
             os.chmod(eosx509CertFile,stat.S_IREAD|stat.S_IWRITE)
-            os.chown(x509CertFile,pw.pw_uid,pw.pw_gid)
+            os.chown(eosx509CertFile,pw.pw_uid,pw.pw_gid)
 
         field  = 'eos-readaheadsize'
         eosReadAheadSize = 4000000 
