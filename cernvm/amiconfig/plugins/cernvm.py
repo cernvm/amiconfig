@@ -387,7 +387,7 @@ class AMIConfigPlugin(AMIPlugin):
         srvField  = 'eos-server'
         if  srvField in cfg and eosUser is not None:
             server   = cfg[srvField]
-            util.mkdirChain('/eos')
+            util.call(['/bin/mkdir', '-p', '/eos'])
             util.call(['/bin/chown',eosUser,'/eos']) 
             util.call(['/sbin/modprobe','fuse']) 
             cmd='/usr/bin/env X509_CERT_DIR=/cvmfs/grid.cern.ch/etc/grid-security/certificates X509_USER_PROXY=%s EOS_READAHEADSIZE=%s EOS_READCACHESIZE=%s /usr/bin/eosfsd /eos -oallow_other,kernel_cache,attr_timeout=30,entry_timeout=30,max_readahead=131072,max_write=4194304,fsname=eos root://%s//eos/'  % (eosx509CertFile,eosReadAheadSize,eosReadCacheSize,server)
