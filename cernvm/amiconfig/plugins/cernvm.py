@@ -374,24 +374,10 @@ class AMIConfigPlugin(AMIPlugin):
             os.chmod(eosx509CertFile,stat.S_IREAD|stat.S_IWRITE)
             os.chown(eosx509CertFile,pw.pw_uid,pw.pw_gid)
 
-        field  = 'eos-readaheadsize'
-        eosReadAheadSize = 4000000 
-        if  field in cfg:
-            eosReadAheadSize = cfg[field]
-            
-        field  = 'eos-readcachesize'
-        eosReadCacheSize = 16000000 
-        if  field in cfg:
-            eosReadCacheSize = cfg[field]
-            
         srvField  = 'eos-server'
         if  srvField in cfg and eosUser is not None:
             server   = cfg[srvField]
-            util.call(['/bin/mkdir', '-p', '/eos'])
-            util.call(['/bin/chown',eosUser,'/eos']) 
-            util.call(['/sbin/modprobe','fuse']) 
-            cmd='/usr/bin/env X509_CERT_DIR=/cvmfs/grid.cern.ch/etc/grid-security/certificates X509_USER_PROXY=%s EOS_READAHEADSIZE=%s EOS_READCACHESIZE=%s /usr/bin/eosfsd /eos -oallow_other,kernel_cache,attr_timeout=30,entry_timeout=30,max_readahead=131072,max_write=4194304,fsname=eos root://%s//eos/'  % (eosx509CertFile,eosReadAheadSize,eosReadCacheSize,server)
-            util.call(cmd.split())
+            util.call(['/etc/cernvm/config','-e',server]) 
 
         if  edition == 'Desktop':
             util.call(['/etc/cernvm/config','-x']) 
