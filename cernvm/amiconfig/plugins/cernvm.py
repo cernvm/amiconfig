@@ -356,11 +356,11 @@ class AMIConfigPlugin(AMIPlugin):
             os.chmod(x509CertFile,stat.S_IREAD|stat.S_IWRITE)
             os.chown(x509CertFile,pw.pw_uid,pw.pw_gid)
 
-        eosUserField = 'eos-user'
+        eosUserField = 'eos_user'
         if  eosUserField in cfg:
             eosUser = cfg[eosUserField]
 
-        eosCertField = 'eos-x509-cert'
+        eosCertField = 'eos_x509_cert'
         if  eosCertField in cfg:
             eosx509Cert = cfg[eosCertField]
             try:
@@ -374,7 +374,7 @@ class AMIConfigPlugin(AMIPlugin):
             os.chmod(eosx509CertFile,stat.S_IREAD|stat.S_IWRITE)
             os.chown(eosx509CertFile,pw.pw_uid,pw.pw_gid)
 
-        srvField  = 'eos-server'
+        srvField  = 'eos_server'
         if  srvField in cfg and eosUser is not None:
             server   = cfg[srvField]
             util.call(['/etc/cernvm/config','-e',server]) 
